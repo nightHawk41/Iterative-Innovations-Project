@@ -1,0 +1,47 @@
+============================================================
+ITERATIVE INNOVATIONS: GIT WORKFLOW GUIDE
+============================================================
+
+To keep our project clean and ensure we get full credit for 
+our engineering process, please follow these steps for 
+EVERY task/ticket.
+
+STEP 1: GET THE LATEST CODE
+Before starting, make sure your local 'main' is up to date.
+  1. git checkout main
+  2. git pull origin main
+
+STEP 2: CREATE A FEATURE BRANCH
+Never code directly on main. Create a branch for your task.
+Naming convention: feature/name-of-task
+  1. git checkout -b feature/your-task-name
+
+STEP 3: CODE AND COMMIT
+Work on your files in VS Code. Once ready:
+  1. git add .
+  2. git commit -m "Brief description of what you did"
+
+STEP 4: PUSH TO GITHUB
+Upload your branch so the team can see it.
+  1. git push origin feature/your-task-name
+
+STEP 5: CREATE A PULL REQUEST (PR)
+You cannot merge your own code to main; it needs a review!
+  1. Go to our GitHub Repository in your browser.
+  2. Click the yellow "Compare & pull request" button.
+  3. Add a description of your changes.
+  4. Assign one teammate as a "Reviewer."
+  5. Click "Create pull request."
+
+STEP 6: REVIEWING A TEAMMATE
+If you are asked to review:
+  1. Go to the "Pull Requests" tab.
+  2. Click "Files changed" to see the code.
+  3. If it looks good, click "Review changes" -> "Approve".
+
+STEP 7: CLEAN UP
+Once the PR is merged on GitHub:
+  1. git checkout main
+  2. git pull origin main
+  3. git branch -d feature/your-task-name (This deletes your local branch)
+============================================================
