@@ -17,5 +17,5 @@
 * **Target Environment:** Web-based
 
 ## Reference Materials
-* Branching overview, please refer to the [Branching Overview](Branching_Overview.txt) included in this repository. It explains how we manage branches to keep our code organized and stable.
-* For the Git workflow, please refer to the [Git Workflow Guide](Git_Workflow_Guide.txt) included in this repository. It will help you understand how to manage branches, create pull requests, and merge code effectively.
+* Branching overview, please refer to the [Branching Overview](docs/Branching_Overview.txt) included in this repository. It explains how we manage branches to keep our code organized and stable.
+* For the Git workflow, please refer to the [Git Workflow Guide](docs/Git_Workflow_Guide.txt) included in this repository. It will help you understand how to manage branches, create pull requests, and merge code effectively.
