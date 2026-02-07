@@ -1,0 +1,35 @@
+============================================================
+ITERATIVE INNOVATIONS: HOW OUR BRANCHING WORKS
+============================================================
+
+1. THE "MAIN" BRANCH (The Production Line)
+Think of the 'main' branch as our "Final Product." It should 
+ALWAYS be stable and bug-free. We never code directly here 
+because if we break 'main', the whole team is stuck.
+
+2. FEATURE BRANCHES (Your Private Workspace)
+When you start a task, you create a "Feature Branch." This 
+is like a parallel universe. You can experiment, break things, 
+and rewrite code without affecting anyone else. 
+
+   Main Branch:   -------------------------------------> (Stable)
+                        \                        /
+   Your Branch:          \-- [Your Work] --/ (Testing)
+
+3. THE "PULL REQUEST" (The Quality Gate)
+When your work is done, you ask to "Merge" your branch back 
+into 'main'. This is called a Pull Request (PR). 
+- It allows a teammate to look at your code.
+- It ensures we don't accidentally delete someone else's work.
+- It keeps our "Final Product" clean and professional.
+
+4. WHY WE DO THIS:
+- Safety: You can't accidentally delete the whole project.
+- Collaboration: Two people can work on different features 
+  at the same time without their code clashing.
+- Accountability: We can see exactly who made which changes 
+  and why (essential for our grade!).
+
+5. THE GOLDEN RULE:
+"Code on your branch, Review on the PR, Merge to Main."
+============================================================
