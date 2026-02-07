@@ -3,9 +3,9 @@
 **Semester:** Spring 2026
 
 ## Team Members
-* [Teammate 1 Name] - Lead/Scrum Master
-* [Teammate 2 Name] - Developer/Designer
-* [Teammate 3 Name] - Developer/QA
+* Sean Laverty  (GitHub Usernames: nightHawk41, StockSlayer) 
+* Habib Aina    (GitHub Username: MajorH5) 
+* [Teammate 3 Name] 
 
 ## Project Overview
 *(To be updated after Stakeholder Presentations)*
