@@ -5,7 +5,7 @@
 ## Team Members
 * Sean Laverty  (GitHub Usernames: nightHawk41, StockSlayer) 
 * Habib Aina    (GitHub Username: MajorH5) 
-* [Teammate 3 Name] 
+* Iyioluwakanmi Kumolalo (GitHub Username: hiya-hey)
 
 ## Project Overview
 *(To be updated after Stakeholder Presentations)*
