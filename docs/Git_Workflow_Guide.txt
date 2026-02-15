@@ -13,7 +13,7 @@ Before starting, make sure your local 'main' is up to date.
 
 STEP 2: CREATE A FEATURE BRANCH
 Never code directly on main. Create a branch for your task.
-Naming convention: feature/name-of-task
+Naming convention: feature/name-of-task (Still thinking on branching naming convention, this works for now.)
   1. git checkout -b feature/your-task-name
 
 STEP 3: CODE AND COMMIT
