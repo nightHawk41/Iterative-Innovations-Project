@@ -1,5 +1,5 @@
 Iterative-Innovations-Project/
-├── docs/                # SRS, SDS, Worker's Agreement
+├── docs/                # Documentation and project notes
 ├── backend/             # FLASK API
 │   ├── app/             # Logic, Routes, Database Models
 │   ├── tests/           # Unit tests
