@@ -553,3 +553,8 @@ Thumbs.db
 pyvenv.cfg
 .venv
 pip-selfcheck.json
+
+#---------------------------
+# SQLite databases
+*.db
+*.sqlite3
