@@ -1,48 +1,38 @@
-# Iterative Innovations - Vending Inventory System
-**Course:** CMSC 447 | **Section:** 06 | **Semester:** Spring 2026
+# UMBC Vending Inventory System (Iterative Innovations - Team 6)
+**Course:** CMSC 447 - Software Engineering | **Section:** 06 | **Semester:** Spring 2026
 
 ## Team 6 Members
 * **Sean Laverty** - GitHub: `nightHawk41`, `StockSlayer`
 * **Habib Aina** - GitHub: `MajorH5`
 * **Iyioluwakanmi Kumolalo** - GitHub: `hiya-hey`
 
----
-
-## Project Overview
-The **Iterative Innovations Project** aims to modernize legacy vending infrastructure at the University Library. We are designing a software-based inventory tracking system that bridges the gap between older-model hardware and modern operational needs.
-
-By integrating campus card transaction data (CBORD), the system infers real-time inventory levels, sales trends, and restocking needs without requiring expensive hardware replacements.
+### Project Overview
+The Iterative Innovations Project offers a modern, software-driven inventory-tracking system for the legacy vending machine at the UMBC Library. Leveraging “Unique Price Mapping” logic, our system connects 15-year-old hardware with modern operational needs, transforming raw, item-blind transaction logs from the Campus Card (CBORD) system into real-time, actionable inventory data.
 
 ### The Problem
-Current 15-year-old vending machines process payments but lack item-level data exports. This results in:
-* **Manual Inspections:** Staff must physically visit machines to check stock.
-* **Operational Inefficiency:** High labor costs and "blind" restocking runs.
-* **Customer Friction:** Frequent "sold-out" items and expired products.
+The current vending machine, originally designed for DVDs, lacks the capability to report slot IDs or product names and transmits only transaction amounts. This leads to several issues:
+- No automated method to identify which items have been sold or restocked.
+- Student workers must rely on handwritten logs and manual inspections to track inventory, which is time-consuming and error-prone.
+- Inconsistent stocking of essential health supplies.
 
 ### Our Solution
-A full-stack web dashboard that:
-1. **Maps Transactions to Items:** Uses unique price-point mapping to identify items from redacted CBORD export logs.
-2. **Monitors Stock Levels:** Inferred depletion tracking based on real-time sales data.
-3. **Inventory Management:** A dedicated interface for student workers to log restocking events and expiration dates.
+A comprehensive web dashboard that:
+- Matches unique price points to specific inventory slots, automating stock deduction.
+- Provides an intuitive interface for staff to log restocks and expiration dates.
+- Offers a color-coded "health pulse" indicating stock levels and product expiration status.
 
----
-
-## Technology Stack
-* **Frontend:** React (JavaScript) with Bootstrap UI
+### Technology Stack
+* **Frontend:** React (JavaScript)
 * **Backend:** Flask (Python) 
-* **Database/Data:** Redacted CBORD Transactional Data (CSV/JSON)
-* **Project Management:** JIRA
-* **Version Control:** GitHub (WSL/Linux Environment)
-* **Communication:** MS Teams
+* **Database/Data:** SQLite 
+* **Integration:** RESTful API & CSV Mocking Service
+* **Dev Environment:** Linux/WSL/Windows
+* **Project Management:** JIRA & MS Teams
 
----
-
-## Getting Started
+### Getting Started
 To set up the development environment on your local machine, please follow the detailed instructions here:
 **[Getting Started Guide](docs/Getting_Started.txt)**
 
----
-
-## Reference Materials
+### Reference Materials
 * **[Branching Overview](docs/Branching_Overview.txt):** Standards for feature branches and stable releases.
 * **[Git Workflow Guide](docs/Git_Workflow_Guide.txt):** Protocol for Pull Requests and Code Reviews.
