@@ -25,7 +25,6 @@ A comprehensive web dashboard that:
 * **Frontend:** React (JavaScript)
 * **Backend:** Flask (Python) 
 * **Database/Data:** SQLite 
-* **Integration:** RESTful API & CSV Mocking Service
 * **Dev Environment:** Linux/WSL/Windows
 * **Project Management:** JIRA & MS Teams
 
