@@ -1,0 +1,299 @@
+Project Context: UMBC Vending Inventory System
+
+Project Overview
+The UMBC Vending Inventory System is a software prototype designed to digitize and automate inventory tracking for a legacy campus vending machine. Currently, the machine accepts Campus Card (CBORD) payments but provides no digital insights, forcing staff to rely on manual checks. This system solves that by ingesting CBORD transaction logs and automatically tracking stock levels and expiration dates in real-time without requiring hardware modifications.
+
+Core Business Logic
+Because the legacy machine's transaction logs only record the amount charged (not the specific item sold), the system relies on a Price-to-Item Mapping algorithm. Every item slot is assigned a unique price. When a transaction is ingested via CSV mock data, the backend matches the transaction amount to the unique price to deduce which slot was purchased, decrementing the inventory accordingly.
+
+Tech Stack & Architecture
+The project uses a three-tier architecture pattern:
+
+    Frontend: A React.js Single-Page Application (SPA) serving as an administrative dashboard.
+
+    Backend: A Python Flask middleware application that handles CSV parsing, business logic, and API requests.
+
+    Database: A serverless SQLite database managed via the SQLAlchemy ORM.
+
+Key Features
+
+    Interactive Dashboard: Displays a grid of vending slots using real-time color-coding (Green, Yellow, Red) to indicate healthy stock, low stock, or approaching expiration dates.
+
+    Automated Tracking: Parses simulated CBORD CSV transaction streams to log sales and auto-decrement inventory.
+
+    Admin Management: Provides a web interface for student workers to input manual restocking events and update expiration dates.
+
+    Alerting System: Generates notifications for items nearing critical stock levels or expiration.
+
+Current Phase: Sprint 2 Active Tasks
+
+We are currently in Sprint 2, focusing on establishing the core backend logic, building the foundational frontend components, and connecting the two via RESTful APIs.
+
+Backend (Flask & Python) Objectives:
+
+    Configure the Flask application environment and set up server.py.
+
+    Integrate Flask with the SQLite database using SQLAlchemy.
+
+    Implement core API endpoints: GET /api/inventory (serve slot data), POST /api/restock (process manual updates), and GET /api/alerts (filter low stock/expiring items).
+
+    Build the Price-to-Item Mapping logic and the CSV processing utility for parsing mock transaction logs.
+
+    Implement backend logic to automatically decrement inventory upon detecting a sale and dynamically calculate a "Days Until Expiration" attribute.
+
+    Enable secure communication (CORS/configuration) between React and Flask.
+
+Frontend (React.js) Objectives:
+
+    Initialize the React project and build the primary Dashboard layout with a responsive sidebar.
+
+    Develop modular components: SlotCard (displays item info), InventoryGrid (vending layout), and StatusIndicator (Green/Yellow/Red stock monitoring).
+
+    Build a "Manual Restock" modal with basic form validation (preventing negative values/invalid dates).
+
+    Implement React Router for navigating between public and admin views.
+
+    Mock global state to verify UI rendering before database linkage.
+
+Database & Integration Objectives:
+
+    Link React frontend components to Flask endpoints.
+
+    Ensure the POST request from the "Manual Restock" modal properly updates the SQLite database.
+
+    Verify the accurate frontend reflection of the "Days Until Expiration" calculation.
+
+    Implement a "Transaction Listener" simulation to demonstrate real-time auto-deduction.
+
+    Handle SQLite concurrency for simultaneous manual restocks and automated sales.
+
+-------------------------------------------------------------------------------------------
+
+Project Diagrams:
+    
+    ==Use Case Diagram Pseudo-Code==
+
+    ACTORS:
+        Student_Customer
+        Administrator_StudentWorker
+        EXTERNAL_SYSTEM: CBORD_CampusCard
+
+    SYSTEM: UMBC_Vending_Inventory_Dashboard
+
+    USE_CASES:
+        [Purchase Item]
+            Actor: Student_Customer
+            Action: Records Sale -> CBORD_CampusCard
+
+        [Map Price to Item]
+            Actor: Student_Customer (via purchase)
+            Note: "Uses unique prices to infer which item was sold via CBORD logs"
+            Action: Provides CSV/Log <- CBORD_CampusCard
+
+        [View Real-Time Dashboard]
+            Actor: Administrator_StudentWorker
+            Includes: [Calculate Days Until Expire]
+
+        [Select Slot for Details]
+            Actor: Administrator_StudentWorker
+
+        [Edit Inventory Data]
+            Actor: Administrator_StudentWorker
+            Includes: [Save changes]
+            Extended By: [Clear Slot Data]
+
+        [Manage Notifications]
+            Actor: Administrator_StudentWorker
+
+        [View System Legend/help]
+            Actor: Administrator_StudentWorker
+
+-------------------------------------
+
+    ==Entity-Relationship (E-R) Diagram Pseudo-Code==
+
+    ENTITY: Transaction
+    - Transaction_id (PK) [INT]
+    - User_ID [VARCHAR]
+    - Date [DATE]
+    - Time [TIME]
+    - total_amount (FK maps to Price) [FLOAT/DECIMAL]
+
+    ENTITY: ItemSlot
+    - Slot_ID (PK) [VARCHAR]
+    - Item_Name [VARCHAR]
+    - Quantity [INT]
+    - Price (Unique identifier for mapping) [FLOAT/DECIMAL]
+    - Expiration_Date [DATE]
+    ... Derived Attribute: Days_until_expire (Calculated dynamically)
+
+    ENTITY: Notification
+    - Notification_id (PK) [INT]
+    - Slot_ID (FK) [VARCHAR]
+    - Message [VARCHAR]
+    - Date_triggered [DATETIME]
+
+    RELATIONSHIPS:
+    [Transaction] >--- (Purchases) ---|| [ItemSlot] 
+        Condition: Transaction.total_amount == ItemSlot.Price
+
+    [ItemSlot] ||--- (Generates) ---o< [Notification]
+        Condition: ItemSlot triggers alert based on threshold logic
+
+-------------------------------------
+
+    ==Sequence Diagram Pseudo-Code==
+
+    PARTICIPANTS:
+        Student, CBORD_System, TransactionProcessor, SlotMapper, VendingMachine, InventoryItem, NotificationService, SQLite, Frontend
+
+    SEQUENCE FLOW:
+    1. Student -> CBORD_System: purchase_item()
+    2. CBORD_System -> TransactionProcessor: post_transaction_log(csv_data)
+    3. TransactionProcessor -> SlotMapper: get_item_by_price(amount)
+    
+    ALT [Mapping Process]
+        IF Mapping Error:
+        TransactionProcessor -> TransactionProcessor: log_error("Unknown Price")
+        ELSE Mapping Success:
+        SlotMapper -> TransactionProcessor: return item_object
+        TransactionProcessor -> VendingMachine: process_sale(transaction_data)
+        VendingMachine -> SQLite: decrement_stock(slot_id)
+        SQLite -> VendingMachine: return updated_record
+        VendingMachine -> InventoryItem: refresh_status()
+        InventoryItem -> InventoryItem: check_qty_and_expiry()
+        InventoryItem -> VendingMachine: return current_color (Red/Yellow/Green)
+        VendingMachine -> Frontend: socket.emit('update', slot_id, current_color)
+        Frontend -> Frontend: UI updates slot to Red, Yellow, or Green
+        
+        ALT [Alert Evaluation]
+            IF current_color == "Red":
+            VendingMachine -> NotificationService: send_critical_alert(item_name)
+            ELSE IF current_color == "Yellow":
+            VendingMachine -> NotificationService: send_warning_alert(item_name)
+        END ALT
+        
+        VendingMachine -> TransactionProcessor: return sale_processed
+    END ALT
+
+    4. TransactionProcessor -> CBORD_System: transaction_acknowledged
+    5. CBORD_System -> Student: purchase_confirmed
+
+-------------------------------------
+
+    ==Flask Backend Class Diagram Pseudo-Code==
+
+    CLASS SlotMapper
+    - mapping_table: Map<Decimal, Integer>
+    + get_item_by_price(amount: Decimal): InventoryItem
+    # is_price_collision(amount: Decimal): Boolean
+
+    CLASS TransactionProcessor
+    - log_source_path: String
+    + ingest_logs(csv_data: String): List<Transaction>
+    - map_to_transactions(raw_data: List<String>): List<Transaction>
+    + sync_with_vending_machine(machine: VendingMachine): void
+
+    CLASS Transaction
+    - transaction_id: Integer
+    - amount: Decimal
+    - timestamp: DateTime
+    - user_id: String
+    - resolved_item_name: String
+
+    CLASS VendingMachine
+    - machine_id: String
+    - inventory: List<InventoryItem>
+    - notification_service: NotificationService
+    + process_sale(tx: Transaction): void
+    + check_inventory_thresholds(): void
+    + get_status_report(): List<InventoryItem>
+
+    CLASS InventoryItem
+    - slot_id: String
+    - item_name: String
+    - quantity: Integer
+    - price: Decimal
+    - expiration_date: Date
+    - low_threshold: Integer = 3
+    - warning_threshold: Integer = 5
+    + decrement_stock(count: Integer): void
+    + refresh_status(): void
+    + get_days_until_expiry(): Integer
+    + is_critical(): Boolean  // Returns True if Quantity <= 3 OR DaysUntil <= 2
+    + is_warning(): Boolean   // Returns True if Quantity <= 5 OR DaysUntil <= 5
+    + get_status_color(): String // Returns "Red", "Yellow", or "Green"
+
+    CLASS NotificationService
+    - alert_log: List<Notification>
+    + send_critical_alert(item_name: String): void
+    + send_warning_alert(item_name: String): void
+    + send_low_stock_alert(item_name: String, slot: String): void
+    + broadcast_system_error(error_msg: String): void
+
+    RELATIONSHIPS:
+    TransactionProcessor (1) --> (1) SlotMapper
+    TransactionProcessor (1) --> (*) Transaction
+    TransactionProcessor (1) --> (1) VendingMachine
+    VendingMachine (1) *-- (1..*) InventoryItem : Composition
+    VendingMachine (1) --> (1) NotificationService
+
+-------------------------------------------------------------------------------------------
+Data Descriptions:
+
+==ItemSlot Schema==
+Attribute,Data Type & Size,Description,Constraints
+Slot_ID,VARCHAR(5),"Unique identifier for the slot (e.g., ""A0"").","Primary Key, Unique"
+Item_Name,VARCHAR(50),Name of the product currently in the slot.,Not Null
+Quantity,INT (4 bytes),Current stock count for the slot (range: 0–10).,"Not Null, ≥ 0"
+Price,FLOAT (8 bytes),"Unique price assigned to the slot (e.g., 2.15) and referenced as a foreign key by the Transaction table.","Unique, Not Null"
+Exp_Date,DATE (3 bytes),Expiration date of the current batch of items in the slot.,Not Null
+Days_Until,INT (4 bytes),Derived attribute. Calculated as Exp_Date minus the current system date. Not stored in the database.,N/A (Calculated)
+
+==Transaction Schema==
+Attribute,Data Type & Size,Description,Constraints
+Trans_ID,INT (4 bytes),"Unique identifier for the sale, sourced from the CBORD transaction log.",Primary Key
+Total_Amt,FLOAT (8 bytes),CBORD records the purchase amount. Used to identify the purchased slot via ItemSlot.Price.,"Foreign Key (ItemSlot.Price), Not Null"
+User_ID,VARCHAR(20),The student or faculty ID associated with the transaction.,Not Null
+Date/Time,DATETIME (8 bytes),"The date and time the purchase occurred, as recorded in the CBORD log.",Not Null
+
+==Notification Schema==
+Attribute,Data Type & Size,Description,Constraints
+Note_ID,INT (4 bytes),Unique identifier for the alert record.,Primary Key
+Slot_ID,VARCHAR(5),The slot that triggered the alert. Links back to the source slot.,"Foreign Key (ItemSlot.Slot_ID), Not Null"
+Message,VARCHAR(100),"Text content of the alert (e.g., ""Slot B2 is low on stock"").",Not Null
+Timestamp,DATETIME (8 bytes),The date and time at which the system triggered the alert.,Not Null
+
+-------------------------------------------------------
+
+File Descriptions: 
+
+==File 1: transaction_stream_mock.csv==
+Field Name,Data Type,Size,Description
+Transaction Date,DATETIME,25 chars,The exact date and time the purchase occurred.
+Location,VARCHAR,20 chars,"Identifier for the specific vending machine (e.g., ""1499 Lib_Sup"")."
+SV&C Plan,VARCHAR,20 chars,"The meal plan or department card used (e.g., ""35 RETRIEVER"")."
+Primary Key,INT,4 bytes,Unique Transaction ID. Maps to Trans_ID in the Transaction table.
+Patron Name,VARCHAR,50 chars,"The name of the student, faculty, or staff member."
+Tran Amt,FLOAT,8 bytes,[Target Field] Amount spent. Used for price matching to Total_Amt.
+Amt Remain,FLOAT,8 bytes,The remaining balance on the user's campus card.
+Tax,FLOAT,8 bytes,Tax applied to the transaction (typically $0.00).
+Period,VARCHAR,20 chars,"Time-of-day designation (e.g., ""4 - Dinner"")."
+Hand,VARCHAR,10 chars,Legacy column from CBORD. Not used by the system.
+Offline,VARCHAR,10 chars,Legacy column from CBORD. Not used by the system.
+Stat,CHAR,1 char,"Status of the transaction (e.g., ""C"" for complete)."
+Operator,VARCHAR,50 chars,Legacy column identifying the machine operator. Not used.
+
+==File 2: inventory_config.csv==
+Field Name,Data Type,Size,Description
+ROW,VARCHAR,5 chars,"Alphanumeric identifier for the slot (e.g., ""A0""). Maps to Slot_ID."
+Product,VARCHAR,50 chars,Name of the item stocked. Maps to Item_Name.
+Vending Price,FLOAT,8 bytes,Unique price for slot resolution. Maps to Price in the ItemSlot table.
+
+==File 3: campus_card_report.csv==
+Field Name,Data Type,Size,Description
+Transaction ID,INT,4 bytes,Unique identifier for the sale. Maps to Trans_ID.
+Date/Time,DATETIME,25 chars,The date and time the purchase occurred. Maps to Date/Time.
+Item Sold,VARCHAR,50 chars,Name of the item deduced by the SlotMapper. Maps to Item_Name.
+Amount,FLOAT,8 bytes,The monetary amount spent. Maps to Total_Amt.
+User ID,VARCHAR,20 chars,Student or faculty ID associated with the sale. Maps to User_ID.

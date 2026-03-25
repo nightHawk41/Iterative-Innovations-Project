@@ -3,7 +3,9 @@ backend/
 │   ├── __init__.py
 │   ├── models/
 │   │   ├── __init__.py
-│   │   └── item_slot.py        # SQLAlchemy Definitions
+│   │   ├── item_slot.py          # SQLAlchemy Definitions
+│   │   ├── notification.py       # SQLAlchemy Definitions
+│   │   └── transaction.py        # SQLAlchemy Definitions
 │   ├── repositories/
 │   │   ├── __init__.py
 │   │   └── item_repository.py  # Database Queries
