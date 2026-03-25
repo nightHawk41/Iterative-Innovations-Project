@@ -1,22 +1,18 @@
 backend/
 ├── app/
-│   ├── __init__.py
 │   ├── models/
-│   │   ├── __init__.py
-│   │   ├── item_slot.py          # SQLAlchemy Definitions
-│   │   ├── notification.py       # SQLAlchemy Definitions
-│   │   └── transaction.py        # SQLAlchemy Definitions
+│   │   ├── item_slot.py            # SQLAlchemy Definitions
+│   │   ├── notification.py         # SQLAlchemy Definitions
+│   │   └── transaction.py          # SQLAlchemy Definitions
 │   ├── repositories/
-│   │   ├── __init__.py
-│   │   └── item_repository.py  # Database Queries
+│   │   └── item_repository.py      # Database Queries
 │   ├── services/
-│   │   ├── __init__.py
-│   │   └── inventory_service.py # Business Logic
+│   │   └── inventory_service.py    # Business Logic
 │   ├── api/
-│   │   ├── __init__.py
-│   │   └── inventory_routes.py  # Flask Endpoints
+│   │   └── inventory_routes.py     # Flask Endpoints
 │   └── utils/
 │       └── helpers.py
-├── server.py                    # The thin entry point
+├── __init__.py
+├── server.py                       # The thin entry point
 └── vending.db
 
