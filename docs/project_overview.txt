@@ -267,7 +267,8 @@ Timestamp,DATETIME (8 bytes),The date and time at which the system triggered the
 -------------------------------------------------------
 
 File Descriptions: 
-
+transaction_stream_mock.csv (Simulated Input): 
+This file acts as a simulated data stream mirroring the external CBORD Campus Card system. The backend's TransactionProcessor ingests this file to read transaction logs, targeting the transaction amount to map it against unique item prices in the database.
 ==File 1: transaction_stream_mock.csv==
 Field Name,Data Type,Size,Description
 Transaction Date,DATETIME,25 chars,The exact date and time the purchase occurred.
@@ -284,12 +285,14 @@ Offline,VARCHAR,10 chars,Legacy column from CBORD. Not used by the system.
 Stat,CHAR,1 char,"Status of the transaction (e.g., ""C"" for complete)."
 Operator,VARCHAR,50 chars,Legacy column identifying the machine operator. Not used.
 
+inventory_config.csv (Administrator Configuration): Provided by vending administrators, this file is used to initialize and dynamically update the Item/Slot database table. It allows stakeholders to update the machine's inventory and price-to-slot mappings without requiring any changes to the backend codebase.
 ==File 2: inventory_config.csv==
 Field Name,Data Type,Size,Description
 ROW,VARCHAR,5 chars,"Alphanumeric identifier for the slot (e.g., ""A0""). Maps to Slot_ID."
 Product,VARCHAR,50 chars,Name of the item stocked. Maps to Item_Name.
 Vending Price,FLOAT,8 bytes,Unique price for slot resolution. Maps to Price in the ItemSlot table.
 
+campus_card_report.csv (System Output): This is a system-generated report produced on-demand by the Flask backend when triggered via the React frontend dashboard. It formats data from the Transaction table into a clean spreadsheet, allowing Campus Card administrators to audit transaction histories.
 ==File 3: campus_card_report.csv==
 Field Name,Data Type,Size,Description
 Transaction ID,INT,4 bytes,Unique identifier for the sale. Maps to Trans_ID.
