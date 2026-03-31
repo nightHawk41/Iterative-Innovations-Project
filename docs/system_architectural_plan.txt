@@ -1,6 +1,5 @@
 backend/
 ├── app/
-│   ├── __init__.py
 │   ├── models/
 │   │   ├── item_slot.py        
 │   │   ├── notification.py 
