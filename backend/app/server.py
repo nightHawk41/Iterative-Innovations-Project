@@ -2,8 +2,18 @@ import os
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from app import db
+from app.api import error_response, register_error_handlers
 from app.utils.seed import seed_database
-from app.models.item_slot import ItemSlot
+
+# Import all models so db.create_all() registers every table.
+from app.models.item_slot import ItemSlot       # noqa: F401
+from app.models.transaction import Transaction  # noqa: F401
+from app.models.notification import Notification  # noqa: F401
+
+# Import blueprints.
+from app.api.inventory_routes import inventory_bp
+from app.api.alerts_routes import alerts_bp
+from app.api.transaction_routes import transaction_bp
 
 app = Flask(__name__)
 CORS(app)
@@ -16,8 +26,16 @@ database_path = os.path.join(basedir, 'vending.db')
 app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{database_path}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Initialize the SQLAlchemy object with the Flask app
+# Initialize the SQLAlchemy object with the Flask app.
 db.init_app(app)
+
+# Register API blueprints.
+app.register_blueprint(inventory_bp)
+app.register_blueprint(alerts_bp)
+app.register_blueprint(transaction_bp)
+
+# Register standardized JSON error handlers (400, 404, 405, 500).
+register_error_handlers(app)
 
 # This is the route that will be called when the frontend makes a request to /test
 @app.route("/test") 
@@ -35,15 +53,13 @@ def sync_inventory_config():
     )
 
     if summary.get("error"):
-        return jsonify(summary), 400
+        return error_response(summary["error"], 400)
 
     return jsonify(summary), 200
 
 if __name__ == "__main__":
     # Create the database tables
     with app.app_context():
-        # Ensure all model metadata is registered before create_all.
-        _ = ItemSlot
         db.create_all()
 
         # Optional startup sync from inventory_config.csv.
