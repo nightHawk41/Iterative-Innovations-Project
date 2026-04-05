@@ -21,24 +21,22 @@ function AdminPage() {
       .finally(() => setLoading(false));
   }
 
-  useEffect(() => {
-    fetchInventory();
-  }, []);
+  useEffect(() => { fetchInventory(); }, []);
 
   return (
     <div>
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <h2 className="mb-0">Admin Panel</h2>
-        <button
-          className="btn btn-primary"
-          onClick={() => setShowModal(true)}
-        >
+      <div className="page-header mb-4">
+        <div>
+          <h2 className="mb-0">Admin Panel</h2>
+          <p className="text-muted mb-0">Manage inventory restocks and process transaction logs.</p>
+        </div>
+        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
           + Manual Restock
         </button>
       </div>
 
       {loading ? (
-        <p className="text-muted">Loading inventory…</p>
+        <div className="text-center py-5 text-muted">Loading inventory…</div>
       ) : (
         <InventoryGrid slots={slots} />
       )}

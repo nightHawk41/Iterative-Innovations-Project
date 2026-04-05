@@ -1,20 +1,31 @@
 import React from "react";
 import StatusIndicator from "./StatusIndicator";
 
+const BORDER_COLOR = {
+  Green:  "#198754",
+  Yellow: "#ffc107",
+  Red:    "#dc3545",
+};
+
 function SlotCard({ slot_id, item_name, quantity, price, days_until_expiration, status }) {
   return (
-    <div className="card h-100 slot-card">
-      <div className="card-body d-flex flex-column gap-1">
-        <div className="d-flex justify-content-between align-items-start">
-          <span className="slot-id text-muted small">{slot_id}</span>
+    <div
+      className="card h-100 slot-card"
+      style={{ borderLeft: `4px solid ${BORDER_COLOR[status] ?? BORDER_COLOR.Red}` }}
+    >
+      <div className="card-body d-flex flex-column p-2 gap-1">
+        <div className="d-flex justify-content-between align-items-center">
+          <span className="slot-id">{slot_id}</span>
           <StatusIndicator status={status} />
         </div>
-        <h6 className="card-title mb-1">{item_name}</h6>
-        <p className="card-text mb-0 small">Qty: <strong>{quantity}</strong></p>
-        <p className="card-text mb-0 small">Price: <strong>${price.toFixed(2)}</strong></p>
-        <p className="card-text small">
-          Expires in: <strong>{days_until_expiration} day{days_until_expiration !== 1 ? "s" : ""}</strong>
-        </p>
+        <p className="card-title fw-semibold mb-1 slot-item-name">{item_name}</p>
+        <div className="slot-quantity">{quantity}</div>
+        <div className="slot-meta">
+          <span>${price.toFixed(2)}</span>
+          <span className={days_until_expiration <= 5 ? "text-danger" : "text-muted"}>
+            {days_until_expiration}d exp
+          </span>
+        </div>
       </div>
     </div>
   );
