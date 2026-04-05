@@ -1,60 +1,175 @@
-/* Layout shell */
+/* =====================
+   Layout Shell
+   ===================== */
 .app-shell {
   display: flex;
   min-height: 100vh;
 }
 
-/* Desktop sidebar */
+.main-content {
+  flex-grow: 1;
+  background-color: #f4f6f9;
+  padding: 2rem;
+}
+
+@media (max-width: 767px) {
+  .app-shell { flex-direction: column; }
+  .main-content { padding: 1rem; }
+}
+
+/* =====================
+   Sidebar
+   ===================== */
 .sidebar {
-  width: 220px;
+  width: 230px;
   min-height: 100vh;
   flex-shrink: 0;
+  background-color: #1a1d23 !important;
 }
 
 .sidebar-brand {
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0.5px;
+  color: #fff;
+  padding: 0.25rem 0;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  margin-bottom: 0.5rem;
 }
 
-/* Active nav link highlight */
+.sidebar .nav-link {
+  border-radius: 6px;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.9rem;
+  color: rgba(255,255,255,0.7) !important;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sidebar .nav-link:hover {
+  background-color: rgba(255,255,255,0.08);
+  color: #fff !important;
+}
+
 .active-link {
-  background-color: rgba(255, 255, 255, 0.15);
-  border-radius: 4px;
+  background-color: rgba(255,255,255,0.15) !important;
+  color: #fff !important;
   font-weight: 600;
 }
 
-/* Main content area */
-.main-content {
-  flex-grow: 1;
-  background-color: #f8f9fa;
+/* =====================
+   Page Header
+   ===================== */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  border-bottom: 1px solid #dee2e6;
+  padding-bottom: 1rem;
 }
 
-/* On mobile, stack sidebar (navbar) above content */
-@media (max-width: 767px) {
-  .app-shell {
-    flex-direction: column;
-  }
+/* =====================
+   Stats Summary Cards
+   ===================== */
+.stat-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
 }
 
-/* Slot card styling */
+.stat-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1;
+  color: #212529;
+}
+
+.stat-label {
+  font-size: 0.78rem;
+  color: #6c757d;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 0.25rem;
+}
+
+/* =====================
+   Accordion Row Headers
+   ===================== */
+.accordion-row-label {
+  font-weight: 700;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #212529;
+}
+
+.accordion-item {
+  border-radius: 8px !important;
+  overflow: hidden;
+}
+
+.accordion-button:not(.collapsed) {
+  background-color: #f0f4ff;
+  color: #212529;
+  box-shadow: none;
+}
+
+.accordion-button:focus {
+  box-shadow: none;
+}
+
+/* =====================
+   Slot Cards
+   ===================== */
 .slot-card {
-  font-size: 0.85rem;
-  border: 1px solid #dee2e6;
-  transition: box-shadow 0.15s ease;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+  border-left-width: 4px;
+  transition: box-shadow 0.15s, transform 0.1s;
+  background: #fff;
 }
 
 .slot-card:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+  transform: translateY(-1px);
 }
 
 .slot-id {
-  font-family: monospace;
-  font-size: 0.75rem;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.7rem;
+  color: #6c757d;
+  font-weight: 600;
+  letter-spacing: 0.5px;
 }
 
-.row-label {
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  font-size: 0.75rem;
+.slot-item-name {
+  font-size: 0.8rem;
+  line-height: 1.3;
+  color: #212529;
+}
+
+.slot-quantity {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #212529;
+  line-height: 1;
+}
+
+.slot-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  color: #6c757d;
+  margin-top: auto;
+  padding-top: 0.25rem;
+  border-top: 1px solid #f0f0f0;
+}
+
+/* =====================
+   Status Badge
+   ===================== */
+.status-badge {
+  font-size: 0.65rem;
+  padding: 0.2em 0.55em;
+  letter-spacing: 0.3px;
 }
