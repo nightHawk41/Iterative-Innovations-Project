@@ -1,12 +1,27 @@
+"""
+=======================================
+backend/app/api/transaction_routes.py
+=======================================
+Flask Blueprint for transaction processing endpoints.
+
+Covers Task B-15 (POST /api/transactions/process) and the D-2 requirement
+that ConcurrencyError (out-of-stock race condition) maps to HTTP 409 Conflict.
+"""
+
 import os
-import tempfile
 
 from flask import Blueprint, jsonify, request
-from app.api import error_response
-from app.services.transaction_processor import TransactionProcessor, DEFAULT_MOCK_PATH
+
+from app.services.inventory_service  import ConcurrencyError
+from app.services.transaction_processor import TransactionProcessor
 
 transaction_bp = Blueprint("transactions", __name__)
-_processor = TransactionProcessor()
+_processor     = TransactionProcessor()
+
+# Default mock path — used when no file is uploaded and no JSON is provided.
+DEFAULT_MOCK = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "data", "transaction_stream_mock.csv")
+)
 
 
 # ---------------------------------------------------------------------------
@@ -16,96 +31,71 @@ _processor = TransactionProcessor()
 @transaction_bp.route("/api/transactions/process", methods=["POST"])
 def process_transactions():
     """
-    Ingest and process CBORD-format transaction data.
+    Accept either:
+        (a) a CSV file upload  (multipart/form-data, field name = "file"), or
+        (b) a JSON body        ({ "rows": [ ... ] })
 
-    Accepts one of three input modes (checked in order):
+    If neither is provided the default mock CSV is used.
 
-    1. CSV file upload  (multipart/form-data, field name: "file")
-       curl -X POST /api/transactions/process -F "file=@transaction_stream_mock.csv"
+    Returns the processing summary:
+        {
+            "processed_count":    <int>,
+            "updated_slots":      [ ... ],
+            "unresolved_amounts": [ ... ]
+        }
 
-    2. JSON rows list  (application/json, body: { "rows": [...] })
-       Useful for testing — pass raw row dicts that match the CSV column names.
-
-    3. No body / empty body  — runs against the default mock file on disk.
-       Useful for a one-click demo trigger from the admin dashboard.
-
-    Response: 200 OK
-    {
-        "processed_count":    <int>,
-        "updated_slots":      [ {...}, ... ],
-        "unresolved_amounts": [ <float>, ... ]
-    }
-
-    Error: 400  { "error": "<message>", "status": 400 }
+    HTTP status codes:
+        200 — processed (even if some rows were unresolved)
+        409 — ConcurrencyError (D-2): a sale hit an out-of-stock slot
+        400 — bad input
+        500 — unexpected server error
     """
+    try:
+        # ------------------------------------------------------------------ #
+        # (a) CSV file upload                                                 #
+        # ------------------------------------------------------------------ #
+        if "file" in request.files:
+            uploaded = request.files["file"]
+            if not uploaded.filename:
+                return jsonify({"error": "Uploaded file has no filename.", "status": 400}), 400
 
-    # ------------------------------------------------------------------
-    # Mode 1: CSV file upload
-    # ------------------------------------------------------------------
-    if "file" in request.files:
-        uploaded = request.files["file"]
-
-        if not uploaded.filename:
-            return error_response("Uploaded file has no filename.", 400)
-
-        if not uploaded.filename.lower().endswith(".csv"):
-            return error_response("Uploaded file must be a .csv file.", 400)
-
-        # Write to a temp file so parse_csv() can use its filepath-based API.
-        tmp_path = ""
-        try:
+            import tempfile
             with tempfile.NamedTemporaryFile(
-                mode="wb", suffix=".csv", delete=False
+                suffix=".csv", delete=False, mode="wb"
             ) as tmp:
-                tmp_path = tmp.name
                 uploaded.save(tmp)
+                tmp_path = tmp.name
 
-            rows = _processor.parse_csv(tmp_path)
-        except (FileNotFoundError, ValueError) as exc:
-            return error_response(str(exc), 400)
-        finally:
-            # Always clean up the temp file.
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
+            try:
+                rows    = _processor.parse_csv(tmp_path)
+                summary = _processor.process_transactions(rows)
+            finally:
+                os.unlink(tmp_path)
 
+            return jsonify(summary), 200
+
+        # ------------------------------------------------------------------ #
+        # (b) JSON rows list                                                  #
+        # ------------------------------------------------------------------ #
+        body = request.get_json(silent=True)
+        if body and "rows" in body:
+            rows    = body["rows"]
+            summary = _processor.process_transactions(rows)
+            return jsonify(summary), 200
+
+        # ------------------------------------------------------------------ #
+        # (c) Default mock CSV                                                #
+        # ------------------------------------------------------------------ #
+        rows    = _processor.parse_csv(DEFAULT_MOCK)
         summary = _processor.process_transactions(rows)
         return jsonify(summary), 200
 
-    # ------------------------------------------------------------------
-    # Mode 2: JSON rows list
-    # ------------------------------------------------------------------
-    body = request.get_json(silent=True)
-    if body is not None:
-        rows = body.get("rows")
-        if not isinstance(rows, list):
-            return error_response(
-                "JSON body must contain a 'rows' key with a list of transaction dicts.",
-                400,
-            )
+    # D-2: optimistic concurrency guard — out-of-stock race
+    except ConcurrencyError as exc:
+        return jsonify({"error": str(exc), "status": 409}), 409
 
-        if len(rows) == 0:
-            return error_response("'rows' list must not be empty.", 400)
-
-        try:
-            summary = _processor.process_transactions(rows)
-        except Exception as exc:
-            return error_response(f"Processing failed: {exc}", 400)
-
-        return jsonify(summary), 200
-
-    # ------------------------------------------------------------------
-    # Mode 3: No body — run against the default mock file
-    # ------------------------------------------------------------------
-    if not os.path.exists(DEFAULT_MOCK_PATH):
-        return error_response(
-            "No input provided and the default mock file was not found at: "
-            f"{DEFAULT_MOCK_PATH}",
-            400,
-        )
-
-    try:
-        summary = _processor.run_from_default_mock()
     except (FileNotFoundError, ValueError) as exc:
-        return error_response(str(exc), 400)
+        return jsonify({"error": str(exc), "status": 400}), 400
 
-    return jsonify(summary), 200
+    except Exception as exc:
+        return jsonify({"error": str(exc), "status": 500}), 500

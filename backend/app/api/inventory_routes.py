@@ -1,7 +1,17 @@
+"""
+=====================================
+backend/app/api/inventory_routes.py
+=====================================
+Flask Blueprint for inventory-related endpoints.
+
+Covers Tasks B-12 (GET /api/inventory), B-13 (POST /api/restock), and the
+D-2 requirement that ConcurrencyError maps to HTTP 409 Conflict.
+"""
+
 from flask import Blueprint, jsonify, request
-from app.api import error_response
-from app.services.inventory_service import InventoryService
- 
+
+from app.services.inventory_service import ConcurrencyError, InventoryService
+
 inventory_bp = Blueprint("inventory", __name__)
 _service = InventoryService()
 
@@ -13,85 +23,78 @@ _service = InventoryService()
 @inventory_bp.route("/api/inventory", methods=["GET"])
 def get_inventory():
     """
-    Return a JSON array of all vending slots.
- 
+    Returns a JSON array of all vending slots.
+
     Each object includes:
         slot_id, item_name, quantity, price, expiration_date,
         days_until_expiry, status_color
- 
-    Response: 200 OK  — always returns a list (empty if no slots seeded).
     """
-    slots = _service.get_inventory()
-    return jsonify(slots), 200
+    try:
+        slots = _service.get_inventory()
+        return jsonify(slots), 200
+    except Exception as exc:
+        return jsonify({"error": str(exc), "status": 500}), 500
+
 
 # ---------------------------------------------------------------------------
 # POST /api/restock
 # ---------------------------------------------------------------------------
- 
+
 @inventory_bp.route("/api/restock", methods=["POST"])
 def restock_slot():
     """
-    Restock a single slot with additional quantity and a new expiration date.
- 
-    Expected JSON body:
+    Restock a slot.
+
+    Request body (JSON):
         {
-            "slot_id":        "<string>",   e.g. "A1"
-            "quantity_added": <int>,        must be > 0
-            "expiration_date": "<string>"   must be a future date, format YYYY-MM-DD
+            "slot_id":        "A3",
+            "quantity_added": 5,
+            "expiration_date": "2026-12-01"
         }
- 
-    Success  → 200  { ...updated slot dict..., "message": "Restock successful" }
-    Failure  → 400  { "error": "<descriptive message>", "status": 400 }
+
+    Success (200):
+        Updated slot dict  +  { "message": "Restock successful" }
+
+    Failure responses:
+        400 — validation error (bad quantity, past date, unknown slot)
+        409 — ConcurrencyError (D-2): slot was concurrently modified
+        500 — unexpected server error
     """
     body = request.get_json(silent=True)
- 
-    # -----------------------------------------------------------------------
-    # 1. Validate that a JSON body was provided and required fields are present
-    # -----------------------------------------------------------------------
     if not body:
-        return error_response("Request body must be valid JSON.", 400)
- 
-    missing = [f for f in ("slot_id", "quantity_added", "expiration_date") if f not in body]
+        return jsonify({"error": "Request body must be JSON.", "status": 400}), 400
+
+    slot_id         = body.get("slot_id")
+    quantity_added  = body.get("quantity_added")
+    expiration_date = body.get("expiration_date")
+
+    # --- Basic presence validation ----------------------------------------
+    missing = [f for f, v in [
+        ("slot_id", slot_id),
+        ("quantity_added", quantity_added),
+        ("expiration_date", expiration_date),
+    ] if v is None]
+
     if missing:
-        return error_response(f"Missing required field(s): {', '.join(missing)}.", 400)
- 
-    slot_id        = body["slot_id"]
-    quantity_added = body["quantity_added"]
-    expiration_date = body["expiration_date"]
- 
-    # -----------------------------------------------------------------------
-    # 2. Basic type validation before handing off to the service layer
-    # -----------------------------------------------------------------------
-    if not isinstance(slot_id, str) or not slot_id.strip():
-        return error_response("slot_id must be a non-empty string.", 400)
- 
-    if not isinstance(quantity_added, int) or isinstance(quantity_added, bool):
-        return error_response("quantity_added must be an integer.", 400)
- 
-    if quantity_added <= 0:
-        return error_response("quantity_added must be greater than 0.", 400)
- 
-    if not isinstance(expiration_date, str) or not expiration_date.strip():
-        return error_response("expiration_date must be a non-empty string in YYYY-MM-DD format.", 400)
- 
-    # -----------------------------------------------------------------------
-    # 3. Delegate to InventoryService — it performs remaining domain validation
-    #    (slot existence, date in the future, stock constraints)
-    # -----------------------------------------------------------------------
+        return jsonify({
+            "error": f"Missing required field(s): {', '.join(missing)}",
+            "status": 400,
+        }), 400
+
+    # --- Delegate to service (D-2 safeguard lives there) ------------------
     try:
-        updated_slot = _service.restock_slot(
-            slot_id=slot_id.strip(),
-            quantity_added=quantity_added,
-            expiration_date=expiration_date.strip(),
-        )
+        updated_slot = _service.restock_slot(slot_id, quantity_added, expiration_date)
+        return jsonify({**updated_slot, "message": "Restock successful"}), 200
+
     except LookupError as exc:
-        return error_response(str(exc), 400)
+        return jsonify({"error": str(exc), "status": 400}), 400
+
     except ValueError as exc:
-        return error_response(str(exc), 400)
+        return jsonify({"error": str(exc), "status": 400}), 400
+
+    # D-2: optimistic concurrency guard
+    except ConcurrencyError as exc:
+        return jsonify({"error": str(exc), "status": 409}), 409
+
     except Exception as exc:
-        return error_response(f"Unexpected error: {exc}", 400)
- 
-    # -----------------------------------------------------------------------
-    # 4. Return updated slot data alongside a success message
-    # -----------------------------------------------------------------------
-    return jsonify({**updated_slot, "message": "Restock successful"}), 200
+        return jsonify({"error": str(exc), "status": 500}), 500

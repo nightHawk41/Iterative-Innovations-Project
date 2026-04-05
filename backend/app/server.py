@@ -15,6 +15,7 @@ from app.api.inventory_routes import inventory_bp
 from app.api.alerts_routes import alerts_bp
 from app.api.transaction_routes import transaction_bp
 
+
 app = Flask(__name__)
 CORS(app)
 
