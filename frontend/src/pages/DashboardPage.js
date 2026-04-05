@@ -1,10 +1,12 @@
 import React from "react";
+import InventoryGrid from "../components/InventoryGrid";
+import mockInventory from "../data/mockInventory";
 
 function DashboardPage() {
   return (
     <div>
-      <h2>Dashboard</h2>
-      <p>Inventory grid will appear here (Task F-4).</p>
+      <h2 className="mb-4">Inventory Dashboard</h2>
+      <InventoryGrid slots={mockInventory} />
     </div>
   );
 }

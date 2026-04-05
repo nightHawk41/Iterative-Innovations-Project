@@ -36,3 +36,25 @@
     flex-direction: column;
   }
 }
+
+/* Slot card styling */
+.slot-card {
+  font-size: 0.85rem;
+  border: 1px solid #dee2e6;
+  transition: box-shadow 0.15s ease;
+}
+
+.slot-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.slot-id {
+  font-family: monospace;
+  font-size: 0.75rem;
+}
+
+.row-label {
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 0.75rem;
+}
