@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from "react";
 import InventoryGrid from "../components/InventoryGrid";
 import RestockModal from "../components/RestockModal";
+import TransactionUpload from "../components/TransactionUpload";
 import mockInventory from "../data/mockInventory";
 
 function AdminPage() {
-  const [slots, setSlots]           = useState([]);
-  const [loading, setLoading]       = useState(true);
-  const [showModal, setShowModal]   = useState(false);
+  const [slots, setSlots]         = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [showModal, setShowModal] = useState(false);
 
   function fetchInventory() {
     setLoading(true);
@@ -16,10 +17,7 @@ function AdminPage() {
         return res.json();
       })
       .then((data) => setSlots(data))
-      .catch(() => {
-        // Fall back to mock data until backend is connected
-        setSlots(mockInventory);
-      })
+      .catch(() => setSlots(mockInventory))
       .finally(() => setLoading(false));
   }
 
@@ -44,6 +42,8 @@ function AdminPage() {
       ) : (
         <InventoryGrid slots={slots} />
       )}
+
+      <TransactionUpload />
 
       <RestockModal
         show={showModal}
