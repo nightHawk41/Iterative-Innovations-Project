@@ -14,7 +14,7 @@ class Notification(db.Model):
     
     slot_id = db.Column(
         db.String(5), 
-        db.ForeignKey("item_slot.slot_id"), 
+        db.ForeignKey("item_slots.slot_id"), 
         nullable=False
         )
     
