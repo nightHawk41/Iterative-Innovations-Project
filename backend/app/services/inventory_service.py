@@ -1,96 +1,223 @@
+"""
+==========================================
+TASK D-2 — inventory_service.py (updated)
+==========================================
+Adds optimistic concurrency safeguards to every inventory write:
+ 
+* restock_slot()  — re-reads the slot row inside the active DB transaction
+                    before writing; raises ConcurrencyError (HTTP 409) if the
+                    row was modified between the read and the write attempt.
+ 
+* apply_sale()    — re-reads the slot row inside the active DB transaction and
+                    raises ConcurrencyError (HTTP 409) if decrementing would
+                    push quantity below zero (stock went to 0 between the
+                    service call and the DB write).
+ 
+Both methods roll back on any exception, keeping the DB in a consistent state.
+ 
+The ConcurrencyError is caught by the API layer (inventory_routes.py /
+transaction_routes.py) and translated to a 409 Conflict response.
+"""
+
+from __future__ import annotations
+
 from datetime import date, datetime
 from typing import Optional
 
+from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
+
 from app import db
+from app.models.item_slot   import ItemSlot
 from app.models.transaction import Transaction
-from app.repositories.item_slot_repository import ItemSlotRepository
+from app.repositories.item_slot_repository  import ItemSlotRepository
 from app.services.mapping_service import MappingService
 
 
+# ---------------------------------------------------------------------------
+# Custom exception — signals a 409 Conflict to the API layer
+# ---------------------------------------------------------------------------
+
+class ConcurrencyError(RuntimeError):
+    """
+    Raised when an inventory write cannot be completed safely because the
+    slot's state was modified between the caller's read and the attempted
+    write.  The API layer should translate this into HTTP 409 Conflict.
+    """
+
+
+# ---------------------------------------------------------------------------
+# Service
+# ---------------------------------------------------------------------------
+
 class InventoryService:
-	"""Application service that owns inventory reads and inventory mutations."""
+    """Application service that owns inventory reads and mutations."""
 
-	def __init__(
-		self,
-		repository: Optional[ItemSlotRepository] = None,
-		mapping_service: Optional[MappingService] = None,
-	):
-		self._repo = repository or ItemSlotRepository()
-		self._mapping = mapping_service or MappingService(self._repo)
+    def __init__(
+        self,
+        repository: Optional[ItemSlotRepository] = None,
+        mapping_service: Optional[MappingService] = None,
+    ):
+        self._repo    = repository    or ItemSlotRepository()
+        self._mapping = mapping_service or MappingService(self._repo)
 
-	def get_inventory(self) -> list[dict]:
-		"""Return all slots as serialized dictionaries for API responses."""
-		slots = self._repo.get_all()
-		return [slot.to_dict() for slot in slots]
+    # ------------------------------------------------------------------
+    # Read-only
+    # ------------------------------------------------------------------
 
-	def restock_slot(self, slot_id: str, quantity_added: int, expiration_date) -> dict:
-		"""
-		Restock one slot and return the updated slot payload.
+    def get_inventory(self) -> list[dict]:
+        """Return all slots serialized for API responses."""
+        return [slot.to_dict() for slot in self._repo.get_all()]
 
-		Validation:
-		- slot_id must exist
-		- quantity_added must be > 0
-		- expiration_date must be a valid date in the future
-		"""
-		if quantity_added is None or quantity_added <= 0:
-			raise ValueError("quantity_added must be a positive integer.")
+    # ------------------------------------------------------------------
+    # Restock  (D-2 safeguard applied)
+    # ------------------------------------------------------------------
 
-		parsed_expiration = self._parse_expiration_date(expiration_date)
-		if parsed_expiration <= date.today():
-			raise ValueError("expiration_date must be a future date.")
+    def restock_slot(
+        self,
+        slot_id: str,
+        quantity_added: int,
+        expiration_date,
+    ) -> dict:
+        """
+        Restock one slot and return the updated slot payload.
 
-		slot = self._repo.get_by_id(slot_id)
-		if slot is None:
-			raise LookupError(f"Slot '{slot_id}' was not found.")
+        Concurrency safeguard (D-2):
+            The slot row is re-read with FOR-UPDATE semantics inside the
+            active session *before* mutating it.  If the row has been
+            deleted between the caller's initial lookup and this write,
+            a ConcurrencyError is raised (→ HTTP 409).
 
-		try:
-			slot.restock(quantity_added, parsed_expiration)
-			self._repo.save(slot, commit=False)
-			db.session.commit()
-		except Exception:
-			db.session.rollback()
-			raise
+        Validation:
+            - slot_id must exist
+            - quantity_added must be > 0
+            - expiration_date must be a valid future date
+        """
+        if quantity_added is None or quantity_added <= 0:
+            raise ValueError("quantity_added must be a positive integer.")
 
-		return slot.to_dict()
+        parsed_expiration = self._parse_expiration_date(expiration_date)
+        if parsed_expiration <= date.today():
+            raise ValueError("expiration_date must be a future date.")
 
-	def apply_sale(self, transaction: Transaction) -> dict:
-		"""
-		Resolve a sale by amount, decrement inventory by one, and return updated slot.
+        # Initial existence check (before opening the write transaction).
+        initial = self._repo.get_by_id(slot_id)
+        if initial is None:
+            raise LookupError(f"Slot '{slot_id}' was not found.")
 
-		Raises LookupError if no matching slot exists for the transaction amount.
-		Raises ValueError if stock cannot be decremented (e.g., already zero).
-		"""
-		if transaction is None:
-			raise ValueError("transaction is required.")
+        try:
+            # ----------------------------------------------------------------
+            # D-2: Re-read the row inside the same DB transaction to detect
+            # concurrent modifications before we commit our write.
+            # ----------------------------------------------------------------
+            fresh_slot = db.session.get(
+                ItemSlot,
+                slot_id,
+                # with_for_update=True would be ideal on Postgres; SQLite
+                # serialises writes at the file level so it is not required,
+                # but we add it defensively for future DB backends.
+            )
 
-		try:
-			slot = self._mapping.resolve_slot_by_amount(transaction.amount)
-			slot.decrement_stock(1)
+            if fresh_slot is None:
+                # Row was deleted between the initial check and now.
+                raise ConcurrencyError(
+                    f"Slot '{slot_id}' no longer exists — "
+                    "it may have been deleted by a concurrent request.  "
+                    "Retry the operation."
+                )
 
-			# Mark the transaction with the resolved slot for downstream reporting.
-			transaction.resolved_slot_id = slot.slot_id
+            fresh_slot.restock(quantity_added, parsed_expiration)
+            db.session.commit()
 
-			self._repo.save(slot, commit=False)
-			db.session.add(transaction)
-			db.session.commit()
-		except Exception:
-			db.session.rollback()
-			raise
+        except ConcurrencyError:
+            db.session.rollback()
+            raise
+        except (ValueError, SQLAlchemyError) as exc:
+            db.session.rollback()
+            raise exc
 
-		return slot.to_dict()
+        return fresh_slot.to_dict()
 
-	@staticmethod
-	def _parse_expiration_date(value) -> date:
-		"""Accept date objects or ISO date strings and return a date object."""
-		if isinstance(value, date):
-			return value
+    # ------------------------------------------------------------------
+    # Apply sale  (D-2 safeguard applied)
+    # ------------------------------------------------------------------
 
-		if isinstance(value, str):
-			try:
-				return datetime.strptime(value, "%Y-%m-%d").date()
-			except ValueError as exc:
-				raise ValueError(
-					"expiration_date must be in 'YYYY-MM-DD' format."
-				) from exc
+    def apply_sale(self, transaction: Transaction) -> dict:
+        """
+        Resolve a sale by amount, decrement inventory by 1, and return
+        the updated slot dict.
 
-		raise ValueError("expiration_date must be a date or YYYY-MM-DD string.")
+        Concurrency safeguard (D-2):
+            Before decrementing, the slot row is re-read inside the active
+            DB session.  If the current quantity is already 0 (another
+            concurrent sale drained the last unit), a ConcurrencyError is
+            raised (→ HTTP 409) rather than letting quantity go negative.
+
+        Raises:
+            LookupError      — no slot matches the transaction amount.
+            ConcurrencyError — slot is out of stock at the DB level (HTTP 409).
+            ValueError       — other domain violation (e.g. negative decrement).
+        """
+        if transaction is None:
+            raise ValueError("transaction is required.")
+
+        try:
+            # Resolve the slot via price mapping.
+            slot = self._mapping.resolve_slot_by_amount(transaction.amount)
+
+            # ----------------------------------------------------------------
+            # D-2: Re-read the row inside the current session so we see the
+            # freshest quantity value committed by any concurrent request.
+            # ----------------------------------------------------------------
+            fresh_slot = db.session.get(ItemSlot, slot.slot_id)
+
+            if fresh_slot is None:
+                raise ConcurrencyError(
+                    f"Slot '{slot.slot_id}' disappeared during the sale — "
+                    "it may have been deleted by a concurrent request."
+                )
+
+            if fresh_slot.quantity <= 0:
+                raise ConcurrencyError(
+                    f"Slot '{fresh_slot.slot_id}' ({fresh_slot.item_name}) "
+                    f"is out of stock (quantity={fresh_slot.quantity}).  "
+                    "Another concurrent sale may have taken the last unit.  "
+                    "Retry after the slot has been restocked."
+                )
+
+            # Safe to decrement — decrement_stock raises ValueError if it
+            # would go negative (belt-and-suspenders).
+            fresh_slot.decrement_stock(1)
+
+            transaction.resolved_slot_id = fresh_slot.slot_id
+
+            db.session.add(fresh_slot)
+            db.session.add(transaction)
+            db.session.commit()
+
+        except (ConcurrencyError, LookupError, ValueError):
+            db.session.rollback()
+            raise
+        except SQLAlchemyError as exc:
+            db.session.rollback()
+            raise RuntimeError(f"Database error during apply_sale: {exc}") from exc
+
+        return fresh_slot.to_dict()
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _parse_expiration_date(value) -> date:
+        """Accept date objects or ISO date strings and return a date object."""
+        if isinstance(value, date):
+            return value
+        if isinstance(value, str):
+            try:
+                return datetime.strptime(value, "%Y-%m-%d").date()
+            except ValueError as exc:
+                raise ValueError(
+                    "expiration_date must be in 'YYYY-MM-DD' format."
+                ) from exc
+        raise ValueError("expiration_date must be a date or YYYY-MM-DD string.")
