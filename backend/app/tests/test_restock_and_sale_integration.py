@@ -20,7 +20,7 @@ Run from the backend/ directory:
     python -m tests.test_restock_and_sale_integration
 
 Expected output ends with:
-    ✅  ALL D-3 CHECKS PASSED
+    ALL D-3 CHECKS PASSED
 """
 
 from __future__ import annotations
@@ -248,7 +248,7 @@ def run_integration_test() -> None:
 
     print()
     print("=" * 55)
-    print("✅  ALL D-3 CHECKS PASSED")
+    print("ALL D-3 CHECKS PASSED")
     print("=" * 55)
 
 
