@@ -13,7 +13,7 @@ Run from the backend/ directory:
     python -m tests.verify_schema
 
 Expected output ends with:
-    ✅  ALL D-1 CHECKS PASSED
+    ALL D-1 CHECKS PASSED
 """
 
 import os
@@ -269,7 +269,7 @@ def run_verification() -> None:
 
     print()
     print("=" * 55)
-    print("✅  ALL D-1 CHECKS PASSED")
+    print("ALL D-1 CHECKS PASSED")
     print("=" * 55)
 
 
