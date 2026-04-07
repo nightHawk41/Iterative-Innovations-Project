@@ -18,15 +18,15 @@ DEFAULT_INVENTORY_CONFIG_PATH = os.path.abspath(
 
 COLUMN_TEST_PROFILE = {
     1:  (10, 120),
-    2:  (9,  120),
-    3:  (8,   90),
-    4:  (7,   90),
-    5:  (6,   60),
-    6:  (5,    4),   # Yellow: qty=warning_threshold AND expiry within 5 days
-    7:  (4,    3),   # Yellow: qty<warning_threshold
-    8:  (3,    1),   # Red:    qty=low_threshold AND expiry within 2 days
-    9:  (2,   -1),   # Red:    qty<low_threshold AND already expired
-    10: (1,   -3),   # Red:    qty well below threshold AND already expired
+    2:  (10, 120),
+    3:  (10, 120),
+    4:  (10, 120),
+    # 5:  (6,   60),
+    # 6:  (5,    4),   # Yellow: qty=warning_threshold AND expiry within 5 days
+    # 7:  (4,    3),   # Yellow: qty<warning_threshold
+    # 8:  (3,    1),   # Red:    qty=low_threshold AND expiry within 2 days
+    # 9:  (2,   -1),   # Red:    qty<low_threshold AND already expired
+    # 10: (1,   -3),   # Red:    qty well below threshold AND already expired
 }
 
 
