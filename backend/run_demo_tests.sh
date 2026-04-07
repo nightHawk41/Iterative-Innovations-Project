@@ -49,15 +49,19 @@ echo -e "${BOLD}  Running all test and verification suites...${RESET}"
 echo -e "${BOLD}================================================================${RESET}"
 
 run_suite \
-    "SUITE 1 of 3 -- Unit & Integration Tests  (B-17, B-18, B-19)" \
+    "SUITE 1 of 4 -- Unit & Integration Tests  (B-17, B-18, B-19)" \
     "python -m pytest --tb=short -v"
 
 run_suite \
-    "SUITE 2 of 3 -- D-1: SQLAlchemy Schema & FK Verification" \
+    "SUITE 2 of 4 -- D-1: SQLAlchemy Schema & FK Verification" \
     "python -m app.tests.verify_schema"
 
 run_suite \
-    "SUITE 3 of 3 -- D-3: Restock & Sale Integration Test" \
+    "SUITE 3 of 4 -- D-2: Pipeline Integration Tests" \
+    "python -m app.tests.test_pipeline_integration"
+
+run_suite \
+    "SUITE 4 of 4 -- D-3: Restock & Sale Integration Test" \
     "python -m app.tests.test_restock_and_sale_integration"
 
 echo ""

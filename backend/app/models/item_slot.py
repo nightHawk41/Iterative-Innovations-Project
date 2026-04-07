@@ -1,8 +1,13 @@
 from datetime import date
 from app import db
+from sqlalchemy import CheckConstraint
 
 class ItemSlot(db.Model):
     __tablename__ = 'item_slots'
+
+    __table_args__ = (
+        CheckConstraint('quantity <= 10', name='max_quantity_check_10'),
+    )
 
     slot_id = db.Column(db.String(5), primary_key=True)
     item_name = db.Column(db.String(50), nullable=False)
@@ -11,6 +16,13 @@ class ItemSlot(db.Model):
     expiration_date = db.Column(db.Date, nullable=False)
     low_threshold = db.Column(db.Integer, nullable=False, default=3)
     warning_threshold = db.Column(db.Integer, nullable=False, default=5)
+
+    # __table_args__ = (
+    #     CheckConstraint('quantity >= 0', name='check_quantity_non_negative'),
+    #     CheckConstraint('price >= 0', name='check_price_non_negative'),
+    #     CheckConstraint('low_threshold >= 0', name='check_low_threshold_non_negative'),
+    #     CheckConstraint('warning_threshold >= 0', name='check_warning_threshold_non_negative'),
+    # )
 
     # --- relationships ---
     transactions = db.relationship('Transaction', backref='slot', lazy=True)
@@ -52,6 +64,8 @@ class ItemSlot(db.Model):
                              )
         self.quantity -= count
 
+    
+    
     def restock(self, amount: int, new_expiration_date: date) -> None:
         """
         Adds amount to quantity and updates the expiration date.
@@ -59,8 +73,16 @@ class ItemSlot(db.Model):
         """
         if amount <= 0:
             raise ValueError("Restock amount must be a positive integer.")
+        
+        if self.quantity + amount > 10:
+            max_quantity = 10 - self.quantity
+            raise ValueError(f"Cannot exceed maximum capacity of 10. You can only add up to {max_quantity} more items.")
+
         self.quantity += amount
         self.expiration_date = new_expiration_date
+        
+
+
 
     # ---------------
     # Serialization

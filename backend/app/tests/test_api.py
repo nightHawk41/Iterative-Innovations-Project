@@ -202,7 +202,7 @@ class TestPostRestock:
         future = (date.today() + timedelta(days=90)).isoformat()
         resp = client.post(
             "/api/restock",
-            json={"slot_id": "A1", "quantity_added": 5, "expiration_date": future},
+            json={"slot_id": "A1", "quantity_added": 1, "expiration_date": future}, # Reduced to 1
         )
         assert resp.status_code == 200
 
@@ -210,41 +210,33 @@ class TestPostRestock:
         future = (date.today() + timedelta(days=90)).isoformat()
         resp = client.post(
             "/api/restock",
-            json={"slot_id": "A1", "quantity_added": 2, "expiration_date": future},
+            json={"slot_id": "A2", "quantity_added": 1, "expiration_date": future}, # Reduced to 1
         )
         body = _json(resp)
-        assert body.get("slot_id") == "A1"
+        assert body.get("slot_id") == "A2"
 
     def test_restock_increments_quantity(self, client):
         future = (date.today() + timedelta(days=60)).isoformat()
 
-        # Get current qty for A2
-        before = next(
-            s for s in _json(client.get("/api/inventory")) if s["slot_id"] == "A2"
-        )
+        before = next(s for s in _json(client.get("/api/inventory")) if s["slot_id"] == "A2")
         qty_before = before["quantity"]
 
         client.post(
             "/api/restock",
-            json={"slot_id": "A2", "quantity_added": 3, "expiration_date": future},
+            json={"slot_id": "A2", "quantity_added": 1, "expiration_date": future}, # Reduced to 1
         )
 
-        # Fetch again and verify
-        after = next(
-            s for s in _json(client.get("/api/inventory")) if s["slot_id"] == "A2"
-        )
-        assert after["quantity"] == qty_before + 3
+        after = next(s for s in _json(client.get("/api/inventory")) if s["slot_id"] == "A2")
+        assert after["quantity"] == qty_before + 1
 
     def test_restock_updates_expiration_date(self, client):
         new_exp = (date.today() + timedelta(days=180)).isoformat()
         client.post(
             "/api/restock",
-            json={"slot_id": "A2", "quantity_added": 4, "expiration_date": new_exp},
+            json={"slot_id": "A2", "quantity_added": 1, "expiration_date": new_exp}, # Reduced to 1
         )
 
-        after = next(
-            s for s in _json(client.get("/api/inventory")) if s["slot_id"] == "A2"
-        )
+        after = next(s for s in _json(client.get("/api/inventory")) if s["slot_id"] == "A2")
         assert after["expiration_date"] == new_exp
 
     def test_restock_reflected_in_subsequent_get(self, client):
@@ -256,7 +248,7 @@ class TestPostRestock:
 
         client.post(
             "/api/restock",
-            json={"slot_id": "A1", "quantity_added": 1, "expiration_date": future},
+            json={"slot_id": "A1", "quantity_added": 1, "expiration_date": future}, # Reduced to 1
         )
 
         after_all = _json(client.get("/api/inventory"))

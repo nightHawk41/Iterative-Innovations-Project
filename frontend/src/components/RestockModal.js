@@ -6,7 +6,7 @@ function getTodayString() {
 }
 
 // Validates a single field. Returns an error string or "".
-function validateField(name, value) {
+function validateField(name, value, maxQuantity) {
   switch (name) {
     case "slotId":
       return value ? "" : "Please select a slot.";
@@ -17,7 +17,12 @@ function validateField(name, value) {
       if (isNaN(qty))              return "Quantity must be a number.";
       if (!Number.isInteger(qty))  return "Quantity must be a whole number (no decimals).";
       if (qty <= 0)                return "Quantity must be greater than 0.";
+
+      // strict frontend validation
+      if (maxQuantity !== undefined && qty > maxQuantity) return `Quantity cannot exceed ${maxQuantity}.`;
+      
       return "";
+
     }
 
     case "expirationDate":
@@ -31,10 +36,10 @@ function validateField(name, value) {
 }
 
 // Validates all fields at once. Returns an errors object.
-function validateAll(slotId, quantity, expirationDate) {
+function validateAll(slotId, quantity, expirationDate, maxQuantity) {
   return {
     slotId:         validateField("slotId",         slotId),
-    quantity:       validateField("quantity",       quantity),
+    quantity:       validateField("quantity",       quantity, maxQuantity),
     expirationDate: validateField("expirationDate", expirationDate),
   };
 }
@@ -48,10 +53,27 @@ function RestockModal({ show, onHide, slots, onRestockSuccess }) {
   const [apiError, setApiError]      = useState(null);
   const [submitting, setSubmitting]  = useState(false);
 
+  // Get the max quantity for the selected slot to enforce strict validation.
+  const selectedSlot = slots.find((s) => s.slot_id === slotId);
+  const maxQuantity = selectedSlot ? 10 - selectedSlot.quantity : 10;
+
   // Mark a field as touched and validate it immediately on blur.
   function handleBlur(name, value) {
     setTouched((prev) => ({ ...prev, [name]: true }));
-    setErrors((prev) => ({ ...prev, [name]: validateField(name, value) }));
+    setErrors((prev) => ({ ...prev, [name]: validateField(name, value, maxQuantity) }));
+  }
+
+  //Update slot change handler to instantly clear/check quantity errors based on new slot capacity
+  function handleSlotChange(e) {
+    const newSlotId = e.target.value;
+    setSlotId(newSlotId);
+
+    // If quantity has been touched, re-validate it against the new slot's max capacity.
+    if (touched.quantity) {
+      const newSelectedSlot = slots.find((s) => s.slot_id === newSlotId);
+      const newMaxQuantity = newSelectedSlot ? 10 - newSelectedSlot.quantity : 10;
+      setErrors((prev) => ({ ...prev, quantity: validateField("quantity", quantity, newMaxQuantity) }));
+    }
   }
 
   async function handleSubmit(e) {
@@ -61,7 +83,7 @@ function RestockModal({ show, onHide, slots, onRestockSuccess }) {
     // Mark all fields touched so all error messages become visible.
     setTouched({ slotId: true, quantity: true, expirationDate: true });
 
-    const allErrors = validateAll(slotId, quantity, expirationDate);
+    const allErrors = validateAll(slotId, quantity, expirationDate, maxQuantity);
     setErrors(allErrors);
 
     if (Object.values(allErrors).some((msg) => msg !== "")) return;
@@ -119,14 +141,14 @@ function RestockModal({ show, onHide, slots, onRestockSuccess }) {
             <Form.Label>Slot ID</Form.Label>
             <Form.Select
               value={slotId}
-              onChange={(e) => setSlotId(e.target.value)}
+              onChange={handleSlotChange}
               onBlur={(e)  => handleBlur("slotId", e.target.value)}
               isInvalid={!!showError("slotId")}
             >
               <option value="">-- Select a slot --</option>
               {slots.map((slot) => (
                 <option key={slot.slot_id} value={slot.slot_id}>
-                  {slot.slot_id} — {slot.item_name}
+                  {slot.slot_id} — {slot.item_name} (Current: {slot.quantity}/10)
                 </option>
               ))}
             </Form.Select>
@@ -144,10 +166,16 @@ function RestockModal({ show, onHide, slots, onRestockSuccess }) {
               step="1"
               placeholder="e.g. 5"
               value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
+              onChange={(e) => {
+                setQuantity(e.target.value);
+                if (touched.quantity) {
+                  setErrors((prev) => ({ ...prev, quantity: validateField("quantity", e.target.value, maxQuantity) }));
+                }
+              }}
               onBlur={(e)  => handleBlur("quantity", e.target.value)}
               isInvalid={!!showError("quantity")}
             />
+            
             <Form.Control.Feedback type="invalid">
               {errors.quantity}
             </Form.Control.Feedback>
