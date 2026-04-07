@@ -38,11 +38,6 @@ app.register_blueprint(transaction_bp)
 # Register standardized JSON error handlers (400, 404, 405, 500).
 register_error_handlers(app)
 
-# This is the route that will be called when the frontend makes a request to /test
-@app.route("/test") 
-def test_route():
-    return {"message": ["Hello", "from", "Flask"]}
-
 
 @app.route("/api/admin/sync-inventory-config", methods=["POST"])
 def sync_inventory_config():
@@ -65,6 +60,6 @@ if __name__ == "__main__":
 
         # Optional startup sync from inventory_config.csv.
         if os.getenv("AUTO_SYNC_INVENTORY_CONFIG", "1") == "1":
-            seed_database(update_existing=False)
+            seed_database(update_existing=True)
 
     app.run(debug=True)
