@@ -25,20 +25,18 @@ function DashboardPage() {
         if (!res.ok) throw new Error("API unavailable");
         return res.json();
       })
-      .then((data) => setSlots(data))
+      .then((data) => setSlots(data)) // Perfectly native data now!
       .catch(() => {
-        // ---- SWAP POINT ----
-        // Remove this .catch block once GET /api/inventory is live.
-        // The fetch above will then supply real data automatically.
         setSlots(mockInventory);
       })
       .finally(() => setLoading(false));
   }, []);
 
   const total    = slots.length;
-  const critical = slots.filter((s) => s.status === "Red").length;
-  const warning  = slots.filter((s) => s.status === "Yellow").length;
-  const healthy  = slots.filter((s) => s.status === "Green").length;
+  // SAFEGUARD: Force .toLowerCase() just in case the data is ever messed up
+  const critical = slots.filter((s) => (s.status_color || "").toLowerCase() === "red").length;
+  const warning  = slots.filter((s) => (s.status_color || "").toLowerCase() === "yellow").length;
+  const healthy  = slots.filter((s) => (s.status_color || "").toLowerCase() === "green").length;
 
   return (
     <div>
@@ -47,7 +45,6 @@ function DashboardPage() {
         <p className="text-muted mb-0">Read-only view — use Admin Panel to make changes.</p>
       </div>
 
-      {/* Stats summary bar */}
       <div className="row row-cols-2 row-cols-md-4 g-3 mb-4">
         <StatCard label="Total Slots"    value={total}    colorClass="border-secondary" />
         <StatCard label="Healthy"        value={healthy}  colorClass="border-success" />

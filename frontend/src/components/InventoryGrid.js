@@ -11,20 +11,19 @@ function groupByRow(slots) {
   }, {});
 }
 
+// SAFEGUARD: use .toLowerCase() when checking the arrays
 function rowSeverityClass(rowSlots) {
-  if (rowSlots.some((s) => s.status === "Red"))    return "text-danger";
-  if (rowSlots.some((s) => s.status === "Yellow")) return "text-warning";
+  if (rowSlots.some((s) => (s.status_color || "").toLowerCase() === "red"))    return "text-danger";
+  if (rowSlots.some((s) => (s.status_color || "").toLowerCase() === "yellow")) return "text-warning";
   return "text-success";
 }
 
 function InventoryGrid({ slots }) {
-  // Hook must come before any early return
   const [activeKeys, setActiveKeys] = useState([]);
 
   const grouped   = slots && slots.length > 0 ? groupByRow(slots) : {};
   const rowLabels = Object.keys(grouped).sort();
 
-  // Sync open panels when slots/rows change (e.g. after live fetch)
   useEffect(() => {
     setActiveKeys(rowLabels);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -61,7 +60,10 @@ function InventoryGrid({ slots }) {
         {rowLabels.map((rowLabel) => {
           const rowSlots    = grouped[rowLabel];
           const alertCount  = rowSlots.filter(
-            (s) => s.status === "Red" || s.status === "Yellow"
+            (s) => {
+              const color = (s.status_color || "").toLowerCase();
+              return color === "red" || color === "yellow";
+            }
           ).length;
           const severityClass = rowSeverityClass(rowSlots);
 
@@ -91,8 +93,8 @@ function InventoryGrid({ slots }) {
                         item_name={slot.item_name}
                         quantity={slot.quantity}
                         price={slot.price}
-                        days_until_expiration={slot.days_until_expiration}
-                        status={slot.status}
+                        days_until_expiry={slot.days_until_expiry}
+                        status_color={slot.status_color}
                       />
                     </div>
                   ))}

@@ -1,13 +1,17 @@
 import React from "react";
 
+// Lowercase keys to match backend
 const STATUS_STYLES = {
-  Green:  { bg: "success", label: "OK" },
-  Yellow: { bg: "warning", label: "Low" },
-  Red:    { bg: "danger",  label: "Critical" },
+  green:  { bg: "success", label: "OK" },
+  yellow: { bg: "warning", label: "Low" },
+  red:    { bg: "danger",  label: "Critical" },
 };
 
-function StatusIndicator({ status }) {
-  const style = STATUS_STYLES[status] ?? STATUS_STYLES["Red"];
+function StatusIndicator({ status_color }) {
+  // SAFEGUARD: Normalize incoming prop
+  const safeColor = (status_color || "red").toLowerCase();
+  const style = STATUS_STYLES[safeColor] ?? STATUS_STYLES.red;
+  
   return (
     <span className={`badge rounded-pill bg-${style.bg} status-badge`}>
       {style.label}
