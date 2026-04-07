@@ -77,7 +77,7 @@ class InventoryService:
         self,
         slot_id: str,
         quantity_added: int,
-        expiration_date,
+        expiration_date: str,
     ) -> dict:
         """
         Restock one slot and return the updated slot payload.
@@ -139,70 +139,116 @@ class InventoryService:
         return fresh_slot.to_dict()
 
     # ------------------------------------------------------------------
-    # Apply sale  (D-2 safeguard applied)
+    # Apply sale  (D-2 safeguard applied + Batch Safe)
     # ------------------------------------------------------------------
-
     def apply_sale(self, transaction: Transaction) -> dict:
         """
         Resolve a sale by amount, decrement inventory by 1, and return
         the updated slot dict.
 
-        Concurrency safeguard (D-2):
-            Before decrementing, the slot row is re-read inside the active
-            DB session.  If the current quantity is already 0 (another
-            concurrent sale drained the last unit), a ConcurrencyError is
-            raised (→ HTTP 409) rather than letting quantity go negative.
-
-        Raises:
-            LookupError      — no slot matches the transaction amount.
-            ConcurrencyError — slot is out of stock at the DB level (HTTP 409).
-            ValueError       — other domain violation (e.g. negative decrement).
+        Uses session.flush() instead of commit() to allow batch processing
+        without stale reads, deferring the final commit or rollback to the caller.
         """
         if transaction is None:
             raise ValueError("transaction is required.")
-
-        try:
-            # Resolve the slot via price mapping.
-            slot = self._mapping.resolve_slot_by_amount(transaction.amount)
-
-            # ----------------------------------------------------------------
-            # D-2: Re-read the row inside the current session so we see the
-            # freshest quantity value committed by any concurrent request.
-            # ----------------------------------------------------------------
-            fresh_slot = db.session.get(ItemSlot, slot.slot_id)
-
-            if fresh_slot is None:
-                raise ConcurrencyError(
-                    f"Slot '{slot.slot_id}' disappeared during the sale — "
-                    "it may have been deleted by a concurrent request."
+        
+        # 1. Resolve the slot via price mapping.
+        # This raises LookupError if no price matches.
+        slot = self._mapping.resolve_slot_by_amount(transaction.amount)
+        
+        # ----------------------------------------------------------------
+        # D-2: Re-read the row inside the current session so we see the
+        # freshest quantity value flushed by the previous CSV row.
+        # ----------------------------------------------------------------
+        fresh_slot = db.session.get(ItemSlot, slot.slot_id)
+        
+        if fresh_slot is None:
+            raise ConcurrencyError(
+                f"Slot '{slot.slot_id}' disappeared during the sale."
                 )
 
-            if fresh_slot.quantity <= 0:
-                raise ConcurrencyError(
-                    f"Slot '{fresh_slot.slot_id}' ({fresh_slot.item_name}) "
-                    f"is out of stock (quantity={fresh_slot.quantity}).  "
-                    "Another concurrent sale may have taken the last unit.  "
-                    "Retry after the slot has been restocked."
-                )
+        # 2. Prevent Negative Inventory
+        if fresh_slot.quantity <= 0:
+            raise ValueError(
+                f"Cannot process sale for ${transaction.amount}. Slot '{fresh_slot.slot_id}' "
+                f"({fresh_slot.item_name}) is out of stock (quantity={fresh_slot.quantity})."
+            )
+        
+        # 3. Decrement the stock using the model's logic
+        fresh_slot.decrement_stock(1)
+        transaction.resolved_slot_id = fresh_slot.slot_id
 
-            # Safe to decrement — decrement_stock raises ValueError if it
-            # would go negative (belt-and-suspenders).
-            fresh_slot.decrement_stock(1)
-
-            transaction.resolved_slot_id = fresh_slot.slot_id
-
-            db.session.add(fresh_slot)
-            db.session.add(transaction)
-            db.session.commit()
-
-        except (ConcurrencyError, LookupError, ValueError):
-            db.session.rollback()
-            raise
-        except SQLAlchemyError as exc:
-            db.session.rollback()
-            raise RuntimeError(f"Database error during apply_sale: {exc}") from exc
+        db.session.add(fresh_slot)
+        db.session.add(transaction)
+        
+        # 4. CRITICAL: Flush instead of Commit!
+        # Pushes changes to the DB for the next row to see, but doesn't finalize.
+        db.session.flush()
 
         return fresh_slot.to_dict()
+
+
+    # def apply_sale(self, transaction: Transaction) -> dict:
+    #     """
+    #     Resolve a sale by amount, decrement inventory by 1, and return
+    #     the updated slot dict.
+
+    #     Concurrency safeguard (D-2):
+    #         Before decrementing, the slot row is re-read inside the active
+    #         DB session.  If the current quantity is already 0 (another
+    #         concurrent sale drained the last unit), a ConcurrencyError is
+    #         raised (→ HTTP 409) rather than letting quantity go negative.
+
+    #     Raises:
+    #         LookupError      — no slot matches the transaction amount.
+    #         ConcurrencyError — slot is out of stock at the DB level (HTTP 409).
+    #         ValueError       — other domain violation (e.g. negative decrement).
+    #     """
+    #     if transaction is None:
+    #         raise ValueError("transaction is required.")
+
+    #     try:
+    #         # Resolve the slot via price mapping.
+    #         slot = self._mapping.resolve_slot_by_amount(transaction.amount)
+
+    #         # ----------------------------------------------------------------
+    #         # D-2: Re-read the row inside the current session so we see the
+    #         # freshest quantity value committed by any concurrent request.
+    #         # ----------------------------------------------------------------
+    #         fresh_slot = db.session.get(ItemSlot, slot.slot_id)
+
+    #         if fresh_slot is None:
+    #             raise ConcurrencyError(
+    #                 f"Slot '{slot.slot_id}' disappeared during the sale — "
+    #                 "it may have been deleted by a concurrent request."
+    #             )
+
+    #         if fresh_slot.quantity <= 0:
+    #             raise ConcurrencyError(
+    #                 f"Slot '{fresh_slot.slot_id}' ({fresh_slot.item_name}) "
+    #                 f"is out of stock (quantity={fresh_slot.quantity}).  "
+    #                 "Another concurrent sale may have taken the last unit.  "
+    #                 "Retry after the slot has been restocked."
+    #             )
+
+    #         # Safe to decrement — decrement_stock raises ValueError if it
+    #         # would go negative (belt-and-suspenders).
+    #         fresh_slot.decrement_stock(1)
+
+    #         transaction.resolved_slot_id = fresh_slot.slot_id
+
+    #         db.session.add(fresh_slot)
+    #         db.session.add(transaction)
+    #         db.session.commit()
+
+    #     except (ConcurrencyError, LookupError, ValueError):
+    #         db.session.rollback()
+    #         raise
+    #     except SQLAlchemyError as exc:
+    #         db.session.rollback()
+    #         raise RuntimeError(f"Database error during apply_sale: {exc}") from exc
+
+    #     return fresh_slot.to_dict()
 
     # ------------------------------------------------------------------
     # Helpers

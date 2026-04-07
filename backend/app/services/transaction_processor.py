@@ -4,6 +4,9 @@ import os
 from datetime import datetime, timezone
 from typing import Optional
 
+from app import db
+
+#from app.models.item_slot import ItemSlot
 from app.models.transaction import Transaction
 from app.repositories.transaction_repository import TransactionRepository
 from app.services.inventory_service import InventoryService
@@ -72,63 +75,71 @@ class TransactionProcessor:
 
         logger.info("[TransactionProcessor] Parsed %d row(s) from %s", len(rows), path)
         return rows
-
+    
     def process_transactions(self, rows: list[dict]) -> dict:
-        """
+        """"
         Process a list of raw CSV row dicts produced by parse_csv().
-
-        For each row:
-          1. Build a Transaction object from the CBORD fields.
-          2. Attempt to resolve the slot via InventoryService.apply_sale().
-          3. On LookupError (unknown price): persist the transaction with
-             resolved_slot_id=None and record the amount as unresolved.
-          4. On any other error: log and skip the row (data integrity guard).
-
-        Returns a summary dict:
-            processed_count   — rows successfully resolved and applied
-            updated_slots     — list of updated slot dicts (one per resolved row)
-            unresolved_amounts — list of amounts that could not be mapped
+        Wraps the entire process in a single transaction, relying on 
+        InventoryService to flush row-by-row to avoid stale reads.
         """
-        processed_count    = 0
-        updated_slots:      list[dict]  = []
+        processed_count = 0
+        updated_slots: list[dict] = []
         unresolved_amounts: list[float] = []
 
-        for row in rows:
-            tx = self._build_transaction(row)
-            if tx is None:
-                continue  # row had unparseable data — already logged
+        try:
+            for row in rows:
+                tx = self._build_transaction(row)
+                if tx is None:
+                    continue  # skip malformed rows but keep going
 
-            try:
-                updated_slot = self._inventory.apply_sale(tx)
-                updated_slots.append(updated_slot)
-                processed_count += 1
+                try:
+                    # Apply the sale (flushes the DB automatically per row)
+                    updated_slot = self._inventory.apply_sale(tx)
+                    updated_slots.append(updated_slot)
+                    processed_count += 1
 
-            except LookupError as exc:
-                # Price did not match any slot — persist unresolved for audit.
-                logger.warning(
-                    "[TransactionProcessor] Unresolved amount $%.2f (tx_id=%s): %s",
-                    tx.amount, tx.transaction_id, exc,
-                )
-                self._tx_repo.save(tx)
-                unresolved_amounts.append(round(tx.amount, 2))
+                except LookupError as exe:
+                    # Price did not match any slot — persist unresolved for audit.
+                    logger.warning(
+                        "[TransactionProcessor] Unresolved amount $%.2f", tx.amount
+                    )
+                    self._tx_repo.save(tx)
+                    db.session.flush() # Flush this audit record too
+                    unresolved_amounts.append(round(tx.amount, 2))
 
-            except ValueError as exc:
-                # Stock went to zero or other domain violation.
-                logger.error(
-                    "[TransactionProcessor] Skipping tx_id=%s ($%.2f): %s",
-                    tx.transaction_id, tx.amount, exc,
-                )
+                except ValueError as exc:
+                    # Reached 0 inventory. Catch it, log it, but DO NOT abort the loop!
+                    logger.error(
+                        "[TransactionProcessor] Skipping tx_id=%s ($%.2f): %s",
+                        tx.transaction_id, tx.amount, exc,
+                    )
+            
+            # If we successfully processed the entire CSV without a catastrophic crash,
+            # we permanently write all flushed changes to the database.
+            db.session.commit()
 
+        except Exception as exc:
+            # Massive system failure (e.g., database disconnected mid-batch)
+            db.session.rollback()
+            logger.critical(
+                "[TransactionProcessor] Catastrophic failure during batch. Rolling back all CSV rows. Error: %s", str(exc)
+            )
+            raise exc # Re-raise to alert the caller
+        
         summary = {
             "processed_count":    processed_count,
             "updated_slots":      updated_slots,
             "unresolved_amounts": unresolved_amounts,
         }
+        
         logger.info(
-            "[TransactionProcessor] Done — %d processed, %d unresolved out of %d row(s).",
-            processed_count, len(unresolved_amounts), len(rows),
+            "[TransactionProcessor] Done — %d processed, %d unresolved.",
+            processed_count, len(unresolved_amounts)
         )
         return summary
+
+
+
 
     # ------------------------------------------------------------------
     # Convenience: run the full pipeline against the default mock file

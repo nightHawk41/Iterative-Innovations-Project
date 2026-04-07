@@ -9,6 +9,7 @@ Covers:
 
 import pytest
 from datetime import date, timedelta
+from app.models.item_slot import ItemSlot
 
 
 # ---------------------------------------------------------------------------
@@ -78,8 +79,15 @@ class ItemSlot:
     def restock(self, amount: int, new_expiration_date: date) -> None:
         if amount <= 0:
             raise ValueError("Restock amount must be a positive integer.")
+        if self.quantity + amount > 10:
+            max_allowed = 10 - self.quantity
+            raise ValueError(
+                f"Cannot exceed maximum capacity of 10. You can only add up to {max_allowed} more items."
+            )
         self.quantity        += amount
         self.expiration_date  = new_expiration_date
+
+
 
     def to_dict(self) -> dict:
         return {
@@ -207,6 +215,41 @@ class TestRestock:
         slot.restock(10, new_exp)
         assert slot.quantity == 10
         assert slot.expiration_date == new_exp
+
+    def test_restock_exact_max_capacity(self):
+        """Test that restocking up to exactly 10 items succeeds."""
+        slot = ItemSlot(
+            slot_id="A1", 
+            item_name="Chips", 
+            quantity=5, 
+            price=1.50, 
+            expiration_date=date.today() + timedelta(days=10)
+        )
+
+        # Add exactly 5 to hit the limit of 10
+        new_expiry = date.today() + timedelta(days=30)
+        slot.restock(5, new_expiry)
+        
+        assert slot.quantity == 10
+        assert slot.expiration_date == new_expiry
+
+    def test_restock_exceeds_max_capacity(self):
+        """Test that restocking past 10 items raises the correct ValueError."""
+        slot = ItemSlot(
+            slot_id="A2", 
+            item_name="Soda", 
+            quantity=8, 
+            price=2.00, 
+            expiration_date=date.today() + timedelta(days=10)
+        )
+
+        # Try to add 3 items (8 + 3 = 11), which should fail
+        with pytest.raises(ValueError, match="maximum capacity of 10"):
+            slot.restock(3, date.today() + timedelta(days=30))
+        
+        # Ensure the original quantity was NOT modified
+        assert slot.quantity == 8
+
 
 
 # ===========================================================================
