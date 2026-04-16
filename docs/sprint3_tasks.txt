@@ -1,0 +1,880 @@
+----------------------
+Current Sprint 3 Tasks
+----------------------
+
+Sprint 3 Goal:
+Revamp the frontend to match the vending.html prototype: a persistent 6x4 machine
+grid, sidebar with Dashboard/Admin tab switching, a slot purchase flow, admin panel
+enhancements, and the new backend endpoints that support them.
+
+Already Completed (no action needed):
+  - Routing defaults: wildcard route redirects to /dashboard (App.js)
+  - Dashboard stats header: Total Slots, Healthy, Low/Expiring, Critical (DashboardPage.js)
+  - Transaction CSV file picker and POST /api/transactions/process call (TransactionUpload.js)
+
+Implementation Order Note:
+Backend tasks should be completed before the frontend tasks that depend on them.
+Frontend tasks marked with [DEPENDS ON ...] must wait for the referenced backend task.
+Resolve the architecture decision in Task A-1 before beginning any Phase 1 frontend work.
+
+------------------------------------------------------------
+ARCHITECTURE DECISION
+------------------------------------------------------------
+
+[TASK A-1] Migrate the app shell to the prototype's persistent two-column layout.
+  Decision: adopt the prototype layout -- sidebar with Dashboard/Admin tab switching,
+  machine grid always visible on the right, no page-level navigation.
+
+  Required changes to the existing codebase:
+    - App.js: remove React Router (<Routes>, <Route>, <Navigate>). Replace with a
+      two-column shell: left sidebar (fixed width) + right machine panel (flex: 1).
+      A single tab state value ("dashboard" | "admin") controls which sidebar content
+      is visible; the machine grid renders unconditionally in the right panel.
+    - Sidebar.js: remove NavLink-based navigation. Replace with two tab buttons
+      (Dashboard / Admin) that toggle the sidebar content via the tab state.
+    - DashboardPage.js: dissolve this page component. Move its stats header and
+      AlertsBanner into the Dashboard tab content area of the sidebar.
+    - AdminPage.js: dissolve this page component. Move its admin controls
+      (restock, CSV uploads, sales report) into the Admin tab content area.
+      The InventoryGrid inside AdminPage is removed; the grid is now the shared
+      right panel and does not belong to either tab.
+    - Remove react-router-dom from the project if no other code uses it after
+      the migration, and remove the corresponding import in index.js.
+
+------------------------------------------------------------
+FRONTEND: Phase 1 -- Vending Machine Grid
+------------------------------------------------------------
+
+[TASK F-1] Replace the Accordion layout in InventoryGrid.js with a static 6x4 CSS grid.
+  The grid must span rows A-F and columns 1-4, producing exactly 24 slot cells.
+  Remove the existing Accordion, groupByRow logic, Expand All / Collapse All buttons,
+  and the react-bootstrap Accordion import.
+  Render all 24 SlotCard components directly in the grid without any row grouping.
+
+[TASK F-2] Update SlotCard to match the vending machine slot display.
+  Each slot must show: position label (e.g., "A1"), product name, price, stock count,
+  and expiration countdown ("Exp: Nd" or "Expired" if days_until_expiry < 0).
+  Remove the existing StatusIndicator badge and left-border color styling.
+  Apply background color directly to the slot cell based on status (see Task F-3).
+
+[TASK F-3] Implement status color and disabled-state logic in SlotCard.
+  Color rules (applied as the slot's background color):
+    - Green  (#5db85d / white text):  stock > 5 AND days_until_expiry > 5
+    - Yellow (#f5c518 / dark text):   stock <= 5 OR days_until_expiry <= 5
+    - Red    (#e53935 / white text):  stock <= 2 OR days_until_expiry <= 2
+    - Gray   (#aaa, disabled):        stock === 0 OR days_until_expiry < 0 (expired)
+  Confirm whether the backend's status_color field already matches these exact thresholds.
+  If thresholds differ, decide whether to use the backend value or recalculate on the frontend.
+  Disabled slots must not respond to clicks and must render at reduced opacity.
+
+[TASK F-4] Make non-disabled slots interactive: clicking opens a purchase confirmation modal.
+  The modal must display the item name, slot position (e.g., "A1"), and price.
+  Modal prompt format: "Purchase [item name] (Slot [position]) for $[price]?"
+  Use a React modal overlay (not window.confirm()) with Confirm and Cancel buttons.
+  Purchase interaction is only active when the Dashboard tab is selected.
+  When the Admin tab is active, all slots must be non-clickable (pointer-events: none
+  or equivalent) even if they are not otherwise disabled.
+  [DEPENDS ON B-1]
+
+[TASK F-5] Implement purchase confirmation logic wired to the backend.
+  On confirm: send POST /api/purchase with { "slot_id": "<id>", "quantity": 1 }.
+  On success: decrement the displayed stock for that slot and re-render the grid.
+  On failure (e.g., out of stock): close the modal and show an error toast.
+  On cancel: close the modal without any changes.
+  This flow must never be reachable from the Admin tab (enforced by Task F-4).
+  [DEPENDS ON B-1]
+
+------------------------------------------------------------
+FRONTEND: Phase 2 -- Dashboard & Navigation
+------------------------------------------------------------
+
+[TASK F-6] Add Reload and Help global control buttons to the UI.
+  Reload behavior — choose one before implementing:
+    Option A (re-fetch only): re-call GET /api/inventory and refresh the grid.
+                              No confirmation prompt or backend reset needed.
+    Option B (full reset):    show a confirmation prompt, then call POST /api/reset
+                              to restore default machine state, then re-fetch the grid.
+                              Requires Task B-4.
+  Help button: show a toast or info modal with brief usage instructions
+               (e.g., "Click a slot to purchase. Use Admin Panel to restock.").
+
+------------------------------------------------------------
+FRONTEND: Phase 3 -- Admin Panel Enhancements
+------------------------------------------------------------
+
+[TASK F-7] Refine the Manual Restock Form in RestockModal.js.
+  The file picker, field validation, and cancel/clear behavior are already implemented.
+  Add: a live "X days until expiry" preview that recalculates as the expiration date changes.
+  Add: display a success toast notification after a successful restock submission,
+       replacing or supplementing the current inline feedback message.
+
+[TASK F-8] Update Transaction CSV upload to show a toast on success.
+  The file picker, .csv validation, and POST /api/transactions/process call already exist.
+  Replace the current inline result panel with a toast notification on successful upload.
+  Keep the existing inline error display for failure cases.
+
+[TASK F-9] Implement the "Upload New Inventory" panel in the Admin view.
+  Add a new collapsible panel styled consistently with the existing TransactionUpload section.
+  Include: a file picker that restricts to .csv files and an "Upload & Process" button.
+  On submit: POST the file to POST /api/inventory/upload.
+  On success: show a success toast and refresh the inventory grid.
+  On failure: display an inline error message below the picker.
+  [DEPENDS ON B-2]
+
+[TASK F-10] Build the Sales Report flow in the Admin view.
+  Add a "Generate Sales Report" button.
+  On click: show a confirmation modal asking the user to confirm or cancel.
+  On confirm: call GET /api/sales-report and trigger a file download of the response.
+  On success: show a toast ("Sales report generated.").
+  On failure: show an error toast with the reason.
+  [DEPENDS ON B-3]
+
+------------------------------------------------------------
+BACKEND: Phase 4 -- New Endpoints
+------------------------------------------------------------
+
+[TASK B-1] Implement POST /api/purchase (api/inventory_routes.py).
+  Request body (JSON): { "slot_id": "A1", "quantity": 1 }.
+  Behavior: look up the slot, confirm stock > 0, decrement by quantity, persist, return updated slot.
+  On success (200): return updated slot dict + { "message": "Purchase successful" }.
+  On out-of-stock or concurrent write conflict (409): return a ConcurrencyError-style response
+    consistent with the existing D-2 pattern used in restock and transaction routes.
+  On unknown slot_id (400): return a descriptive error message.
+  This endpoint is a hard dependency for frontend Tasks F-4 and F-5.
+
+[TASK B-2] Implement POST /api/inventory/upload (api/inventory_routes.py).
+  Accepts a CSV file upload (multipart/form-data, field name = "file").
+  Expected CSV columns must match the schema of the existing inventory_config.csv.
+  Behavior: parse the uploaded CSV, clear all existing ItemSlot rows, seed with new rows.
+  On success (200): return { "message": "Inventory uploaded", "slot_count": <int> }.
+  On bad file format or parse error (400): return a descriptive error without touching the database.
+
+[TASK B-3] Implement GET /api/sales-report (api/transaction_routes.py).
+  Aggregate data from the most recently processed transaction stream to produce a sales report.
+  Report columns: slot_id, item_name, total_units_sold, total_revenue.
+  Return the report as a downloadable CSV file with header:
+    Content-Disposition: attachment; filename="sales_report.csv"
+  If no transactions have been processed yet, return 404 with a descriptive message.
+
+[TASK B-4] Implement POST /api/reset (api/inventory_routes.py).  [CONDITIONAL -- see Task F-6]
+  Re-run the seed script to restore the database to its original default state.
+  On success (200): return { "message": "Machine reset to default state" }.
+  Only implement this task if the Reload button in Task F-6 is implemented as Option B
+  (full machine reset). If Option A (re-fetch only) is chosen, this task is not needed.
+
+------------------------
+vending.html prototype 
+------------------------
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>UMBC Vending Inventory System</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+    :root {
+        --gold: #f0a500;
+        --black: #1a1a1a;
+        --panel-bg: #e8e8e8;
+        --sidebar-bg: #d4d4d4;
+        --border: #999;
+        --green: #4caf50;
+        --yellow: #f5c518;
+        --red: #e53935;
+        --slot-border: #444;
+        --header-bg: #c8c8c8;
+        --blue-panel: #cfe2f3;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+        font-family: 'IBM Plex Sans', sans-serif;
+        background: #b0b0b0;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* ── HEADER ── */
+    header {
+        display: flex;
+        align-items: center;
+        background: var(--panel-bg);
+        border-bottom: 2px solid var(--border);
+        padding: 10px 20px;
+        gap: 20px;
+    }
+
+    .logo-area {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        border-right: 2px solid var(--border);
+        padding-right: 20px;
+    }
+
+    .umbc-shield {
+        width: 52px;
+        height: 52px;
+    }
+
+    .umbc-text {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 2rem;
+        font-weight: 600;
+        letter-spacing: -1px;
+        color: var(--black);
+    }
+
+    .header-title {
+        font-size: 1.2rem;
+        color: #333;
+        padding-left: 12px;
+    }
+
+    /* ── MAIN LAYOUT ── */
+    .app-body {
+        display: grid;
+        /* grid-template-columns: 280px 1fr 320px; */
+        grid-template-columns: 280px 1fr;
+        gap: 0;
+        flex: 1;
+        min-height: 0;
+    }
+
+    /* ── SIDEBAR ── */
+    .sidebar {
+        background: var(--sidebar-bg);
+        border-right: 2px solid var(--border);
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .nav-tabs {
+        display: flex;
+        border-bottom: 2px solid var(--border);
+    }
+
+    .nav-tab {
+        flex: 1;
+        padding: 8px 10px;
+        font-size: 0.82rem;
+        font-weight: 600;
+        border: none;
+        background: var(--header-bg);
+        cursor: pointer;
+        border-right: 1px solid var(--border);
+        transition: background 0.15s;
+    }
+
+    .nav-tab:last-child { border-right: none; }
+    .nav-tab.active { background: var(--panel-bg); }
+    .nav-tab:hover { background: #d8d8d8; }
+
+    .sidebar-content {
+        padding: 12px;
+        flex: 1;
+        overflow-y: auto;
+    }
+
+    .panel-box {
+        border: 2px solid var(--border);
+        background: var(--panel-bg);
+        margin-bottom: 10px;
+    }
+
+    .panel-box-header {
+        background: var(--header-bg);
+        border-bottom: 1px solid var(--border);
+        padding: 6px 10px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .panel-box-header .toggle-btn {
+        font-size: 0.75rem;
+        color: #555;
+    }
+
+    .panel-box-body {
+        padding: 10px;
+        background: var(--blue-panel);
+        display: none;
+    }
+
+    .panel-box-body.open { display: block; }
+
+    .form-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 8px;
+        font-size: 0.8rem;
+    }
+
+    .form-row label {
+        min-width: 80px;
+        font-weight: 600;
+        font-size: 0.78rem;
+        color: #333;
+    }
+
+    .form-row select,
+    .form-row input {
+        flex: 1;
+        padding: 4px 6px;
+        border: 1px solid var(--border);
+        font-size: 0.78rem;
+        font-family: 'IBM Plex Sans', sans-serif;
+        background: white;
+    }
+
+    .btn-row {
+        display: flex;
+        gap: 6px;
+        margin-top: 4px;
+    }
+
+    .btn {
+        padding: 5px 14px;
+        border: 1.5px solid var(--border);
+        background: var(--panel-bg);
+        font-family: 'IBM Plex Sans', sans-serif;
+        font-size: 0.78rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.15s;
+    }
+
+    .btn:hover { background: #ccc; }
+    .btn.primary { background: var(--black); color: white; border-color: var(--black); }
+    .btn.primary:hover { background: #333; }
+
+    .sidebar-action-btn {
+        width: 100%;
+        text-align: left;
+        padding: 7px 10px;
+        border: 2px solid var(--border);
+        background: var(--panel-bg);
+        font-family: 'IBM Plex Sans', sans-serif;
+        font-size: 0.83rem;
+        font-weight: 600;
+        cursor: pointer;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: background 0.15s;
+    }
+
+    .sidebar-action-btn:hover { background: #d0d0d0; }
+
+    .sidebar-footer {
+        padding: 10px 12px;
+        border-top: 2px solid var(--border);
+        display: flex;
+        gap: 8px;
+    }
+
+    /* ── MIDDLE PANEL ── */
+    .middle-panel {
+        background: var(--panel-bg);
+        border-right: 2px solid var(--border);
+        display: flex;
+        flex-direction: column;
+    }
+
+    .panel-nav-tabs {
+        display: flex;
+        border-bottom: 2px solid var(--border);
+        background: var(--header-bg);
+    }
+
+    .panel-nav-tab {
+        padding: 8px 18px;
+        font-size: 0.82rem;
+        font-weight: 600;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        border-right: 1px solid var(--border);
+        transition: background 0.15s;
+    }
+
+    .panel-nav-tab.active { background: var(--panel-bg); }
+    .panel-nav-tab:hover { background: #d4d4d4; }
+
+    .dashboard-content {
+        padding: 16px;
+        flex: 1;
+    }
+
+    .dashboard-title {
+        font-size: 1rem;
+        font-weight: 600;
+        margin-bottom: 14px;
+        border-bottom: 2px solid var(--border);
+        padding-bottom: 8px;
+    }
+
+    .stat-card {
+        border: 2px solid var(--border);
+        background: white;
+        padding: 10px 14px;
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 0.9rem;
+        font-weight: 500;
+    }
+
+    .stat-card .stat-value {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 1.1rem;
+        font-weight: 600;
+    }
+
+    .stat-card.healthy .stat-value { color: var(--green); }
+    .stat-card.warning .stat-value { color: #c8880a; }
+    .stat-card.critical .stat-value { color: var(--red); }
+
+    .dashboard-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 16px;
+    }
+
+    /* ── RIGHT PANEL: MACHINE ── */
+    .machine-panel {
+        background: var(--panel-bg);
+        display: flex;
+        flex-direction: column;
+    }
+
+    .machine-panel-header {
+        background: var(--header-bg);
+        border-bottom: 2px solid var(--border);
+        padding: 8px 14px;
+        font-size: 1rem;
+        font-weight: 600;
+        text-align: center;
+    }
+
+    .machine-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+        padding: 14px;
+        flex: 1;
+    }
+
+    .slot {
+        border: 2px solid var(--slot-border);
+        padding: 8px 6px;
+        cursor: pointer;
+        text-align: center;
+        transition: filter 0.15s, transform 0.1s;
+        font-size: 0.72rem;
+        position: relative;
+    }
+
+    .slot:hover:not(.disabled) {
+        filter: brightness(0.9);
+        transform: scale(1.03);
+    }
+
+    .slot.disabled {
+        background: #aaa !important;
+        cursor: not-allowed;
+        opacity: 0.7;
+    }
+
+    .slot.green  { background: #5db85d; color: #fff; }
+    .slot.yellow { background: var(--yellow); color: #333; }
+    .slot.red    { background: var(--red); color: #fff; }
+
+    .slot-id {
+        font-family: 'IBM Plex Mono', monospace;
+        font-weight: 600;
+        font-size: 0.85rem;
+        margin-bottom: 2px;
+    }
+
+    .slot-name { font-size: 0.68rem; margin-bottom: 2px; }
+    .slot-price { font-weight: 600; font-size: 0.75rem; }
+    .slot-stock { font-size: 0.65rem; opacity: 0.9; }
+    .slot-exp { font-size: 0.6rem; opacity: 0.8; margin-top: 2px; }
+
+    /* ── POPUP ── */
+    .popup {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.55);
+        justify-content: center;
+        align-items: center;
+        z-index: 100;
+    }
+
+    .popup-content {
+        background: var(--panel-bg);
+        border: 2px solid var(--border);
+        padding: 24px;
+        width: 320px;
+    }
+
+    .popup-content h3 {
+        font-size: 0.95rem;
+        margin-bottom: 12px;
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 8px;
+    }
+
+    .popup-content p {
+        font-size: 0.88rem;
+        margin-bottom: 16px;
+        color: #333;
+    }
+
+    /* ── TOAST ── */
+    .toast {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        background: var(--black);
+        color: white;
+        padding: 10px 18px;
+        font-size: 0.83rem;
+        font-family: 'IBM Plex Mono', monospace;
+        border-left: 4px solid var(--gold);
+        opacity: 0;
+        transform: translateY(10px);
+        transition: opacity 0.2s, transform 0.2s;
+        z-index: 200;
+    }
+
+    .toast.show { opacity: 1; transform: translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+    <div class="logo-area">
+        <!-- UMBC Shield SVG approximation -->
+        <svg class="umbc-shield" viewBox="0 0 52 52" xmlns="http://www.w3.org/2000/svg">
+            <path d="M26 2 L50 10 L50 32 C50 44 38 50 26 52 C14 50 2 44 2 32 L2 10 Z" fill="#f0a500" stroke="#111" stroke-width="1.5"/>
+            <path d="M26 6 L46 13 L46 31 C46 41 36 47 26 49 C16 47 6 41 6 31 L6 13 Z" fill="white"/>
+            <rect x="6" y="6" width="20" height="22" fill="#c8102e" rx="0"/>
+            <rect x="26" y="28" width="20" height="20" fill="#c8102e" rx="0"/>
+            <text x="14" y="21" font-size="13" font-weight="bold" fill="white" text-anchor="middle" font-family="serif">M</text>
+            <text x="36" y="42" font-size="11" font-weight="bold" fill="white" text-anchor="middle" font-family="serif">BC</text>
+        </svg>
+        <span class="umbc-text">UMBC</span>
+    </div>
+    <span class="header-title">Vending Inventory System</span>
+</header>
+
+<!-- MAIN BODY -->
+<div class="app-body">
+
+    <!-- ── LEFT SIDEBAR ── -->
+    <aside class="sidebar">
+        <div class="nav-tabs">
+            <button class="nav-tab active" onclick="switchSidebarTab('dashboard', this)">Dashboard</button>
+            <button class="nav-tab" onclick="switchSidebarTab('admin', this)">Admin Panel</button>
+        </div>
+
+        <!-- Dashboard Tab -->
+        <div class="sidebar-content" id="sidebar-dashboard">
+            <p style="font-size:0.8rem;color:#555;padding:4px 0 10px;">Overview and quick stats.</p>
+            <div class="stat-card">
+                <span>Total Slots</span>
+                <span class="stat-value" id="sb-total">24</span>
+            </div>
+            <div class="stat-card healthy">
+                <span>Healthy</span>
+                <span class="stat-value" id="sb-healthy">—</span>
+            </div>
+            <div class="stat-card warning">
+                <span>Low / Expiring</span>
+                <span class="stat-value" id="sb-warning">—</span>
+            </div>
+            <div class="stat-card critical">
+                <span>Critical / Out</span>
+                <span class="stat-value" id="sb-critical">—</span>
+            </div>
+        </div>
+
+        <!-- Admin Tab -->
+        <div class="sidebar-content" id="sidebar-admin" style="display:none;">
+
+            <!-- Manual Restock -->
+            <div class="panel-box">
+                <div class="panel-box-header" onclick="togglePanel('restock-body', this)">
+                    + Manual Restock
+                    <span class="toggle-btn">▸</span>
+                </div>
+                <div class="panel-box-body" id="restock-body">
+                    <div class="form-row">
+                        <label>Slot ID</label>
+                        <select id="restock-slot">
+                            <option value="">– Select Slot –</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <label>Qty Added</label>
+                        <input type="number" id="restock-qty" placeholder="e.g. 5" min="1" max="20">
+                    </div>
+                    <div class="form-row">
+                        <label>Exp Date</label>
+                        <input type="date" id="restock-date">
+                    </div>
+                    <div class="btn-row">
+                        <button class="btn primary" onclick="doRestock()">Restock</button>
+                        <button class="btn" onclick="clearRestock()">Cancel</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Upload Transaction CSV -->
+            <div class="panel-box">
+                <div class="panel-box-header" onclick="togglePanel('txn-body', this)">
+                    Upload Transaction CSV
+                    <span class="toggle-btn">▸</span>
+                </div>
+                <div class="panel-box-body" id="txn-body">
+                    <div class="form-row">
+                        <input type="file" accept=".csv" id="txn-file" style="font-size:0.75rem;">
+                    </div>
+                    <div class="btn-row">
+                        <button class="btn primary" onclick="showToast('Transaction CSV processed.')">Upload &amp; Process</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Upload Inventory CSV -->
+            <div class="panel-box">
+                <div class="panel-box-header" onclick="togglePanel('inv-body', this)">
+                    Upload New Inventory CSV
+                    <span class="toggle-btn">▸</span>
+                </div>
+                <div class="panel-box-body" id="inv-body">
+                    <div class="form-row">
+                        <input type="file" accept=".csv" id="inv-file" style="font-size:0.75rem;">
+                    </div>
+                    <div class="btn-row">
+                        <button class="btn primary" onclick="showToast('Inventory CSV uploaded.')">Upload &amp; Process</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Generate Sales Report -->
+            <button class="sidebar-action-btn" onclick="showToast('Sales report generated.')">
+                📊 Generate Sales Report
+            </button>
+
+        </div>
+
+        <div class="sidebar-footer">
+            <button class="btn" onclick="renderMachine(); updateStats();">Reload</button>
+            <button class="btn" onclick="showToast('Help: hover slots to see details, click to purchase.')">Help</button>
+        </div>
+    </aside>
+
+    <!-- ── RIGHT: MACHINE ── -->
+    <section class="machine-panel">
+        <div class="machine-panel-header">UMBC Vending Machine</div>
+        <div class="machine-grid" id="machine"></div>
+    </section>
+
+</div>
+
+<!-- PURCHASE POPUP -->
+<div class="popup" id="popup">
+    <div class="popup-content">
+        <h3>Confirm Purchase</h3>
+        <p id="popup-text"></p>
+        <div class="btn-row">
+            <button class="btn primary" onclick="confirmPurchase()">Confirm</button>
+            <button class="btn" onclick="closePopup()">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+const items = [
+    ["Chips",1.50],["Soda",2.00],["Candy Bar",1.25],["Water",1.00],
+    ["Cookies",1.75],["Juice",2.25],["Gum",0.75],["Crackers",1.50],
+    ["Granola Bar",1.25],["Iced Tea",2.00],["Trail Mix",1.75],["Energy Drink",3.00],
+    ["Pretzels",1.50],["Sparkling Water",2.25],["Chocolate",1.50],["Nuts",2.00],
+    ["Popcorn",1.75],["Lemonade",2.00],["Protein Bar",2.50],["Coffee Can",2.75],
+    ["Candy",1.00],["Milk",2.25],["Smoothie",3.50],["Water Bottle",1.50]
+];
+
+const rows = ["A","B","C","D","E","F"];
+
+let inventory = Array.from({length:24}, () => Math.floor(Math.random()*11));
+let daysUntilExpiration = Array.from({length:24}, () => Math.floor(Math.random()*13)-2);
+let selectedIndex = null;
+
+// ── Slot ID helpers ──
+function slotLabel(i) {
+    return rows[Math.floor(i/4)] + i%4;
+}
+
+// ── Color ──
+function getColorClass(count, days) {
+    if (days < 0 || count === 0) return "disabled";
+    if (count <= 2 || days <= 2) return "red";
+    if (count <= 5 || days <= 5) return "yellow";
+    return "green";
+}
+
+// ── Render machine ──
+function renderMachine() {
+    const machine = document.getElementById("machine");
+    machine.innerHTML = "";
+    for (let i=0; i<24; i++) {
+        const [name, price] = items[i];
+        const count = inventory[i];
+        const days = daysUntilExpiration[i];
+        const expired = days < 0;
+        const colorClass = getColorClass(count, days);
+
+        const slot = document.createElement("div");
+        slot.className = `slot ${colorClass}`;
+
+        slot.innerHTML = `
+            <div class="slot-id">${slotLabel(i)}</div>
+            <div class="slot-name">${name}</div>
+            <div class="slot-price">$${price.toFixed(2)}</div>
+            <div class="slot-stock">Stock: ${count}</div>
+            <div class="slot-exp">${expired ? "⚠ Expired" : `Exp: ${days}d`}</div>
+        `;
+
+        if (count > 0 && !expired) {
+            slot.onclick = () => openPopup(i, slotLabel(i), name, price);
+        }
+
+        machine.appendChild(slot);
+    }
+    updateStats();
+}
+
+// ── Stats ──
+function updateStats() {
+    let healthy=0, warning=0, critical=0;
+    for (let i=0; i<24; i++) {
+        const c = inventory[i], d = daysUntilExpiration[i];
+        if (d < 0 || c === 0) critical++;
+        else if (c < 3 || d <= 2) warning++;
+        else healthy++;
+    }
+	
+    document.getElementById("sb-healthy").textContent = healthy;
+    document.getElementById("sb-warning").textContent = warning;
+    document.getElementById("sb-critical").textContent = critical;
+
+    // populate restock slot dropdown
+    const sel = document.getElementById("restock-slot");
+    sel.innerHTML = '<option value="">– Select Slot –</option>';
+    for (let i=0; i<24; i++) {
+        const opt = document.createElement("option");
+        opt.value = i;
+        opt.textContent = `${slotLabel(i)} – ${items[i][0]}`;
+        sel.appendChild(opt);
+    }
+}
+
+// ── Popup ──
+function openPopup(index, slotId, name, price) {
+    selectedIndex = index;
+    document.getElementById("popup-text").textContent =
+        `Purchase ${name} (Slot ${slotId}) for $${price.toFixed(2)}?`;
+    document.getElementById("popup").style.display = "flex";
+}
+
+function closePopup() {
+    document.getElementById("popup").style.display = "none";
+}
+
+function confirmPurchase() {
+    if (selectedIndex !== null && inventory[selectedIndex] > 0) {
+        inventory[selectedIndex]--;
+        showToast(`✓ ${items[selectedIndex][0]} dispensed!`);
+    }
+    closePopup();
+    renderMachine();
+}
+
+// ── Sidebar tab switch ──
+function switchSidebarTab(tab, btn) {
+    document.querySelectorAll(".nav-tab").forEach(t => t.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById("sidebar-dashboard").style.display = tab === "dashboard" ? "block" : "none";
+    document.getElementById("sidebar-admin").style.display = tab === "admin" ? "block" : "none";
+}
+
+// ── Collapsible panels ──
+function togglePanel(bodyId, header) {
+    const body = document.getElementById(bodyId);
+    const isOpen = body.classList.toggle("open");
+    header.querySelector(".toggle-btn").textContent = isOpen ? "▾" : "▸";
+}
+
+// ── Restock ──
+function doRestock() {
+    const idx = document.getElementById("restock-slot").value;
+    const qty = parseInt(document.getElementById("restock-qty").value);
+    const dateVal = document.getElementById("restock-date").value;
+
+    if (idx === "" || isNaN(qty) || qty < 1) {
+        showToast("⚠ Please fill in all restock fields.");
+        return;
+    }
+
+    inventory[parseInt(idx)] = Math.min(10, inventory[parseInt(idx)] + qty);
+
+    if (dateVal) {
+        const today = new Date();
+        const exp = new Date(dateVal);
+        const diff = Math.round((exp - today) / (1000*60*60*24));
+        daysUntilExpiration[parseInt(idx)] = diff;
+    }
+
+    showToast(`✓ ${items[parseInt(idx)][0]} restocked (+${qty})`);
+    clearRestock();
+    renderMachine();
+}
+
+function clearRestock() {
+    document.getElementById("restock-slot").value = "";
+    document.getElementById("restock-qty").value = "";
+    document.getElementById("restock-date").value = "";
+}
+
+// ── Toast ──
+function showToast(msg) {
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    setTimeout(() => t.classList.remove("show"), 3000);
+}
+
+// ── Init ──
+renderMachine();
+</script>
+</body>
+</html>
