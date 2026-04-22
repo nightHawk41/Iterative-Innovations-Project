@@ -1,59 +1,80 @@
 /* =====================
-   Layout Shell
+   Layout Shell (two-column)
    ===================== */
-.app-shell {
-  display: flex;
+.app-body {
+  display: grid;
+  grid-template-columns: 280px 1fr;
   min-height: 100vh;
 }
 
-.main-content {
-  flex-grow: 1;
-  background-color: #f4f6f9;
-  padding: 2rem;
+/* =====================
+   Machine Panel (right column)
+   ===================== */
+.machine-panel {
+  background: #e8e8e8;
+  display: flex;
+  flex-direction: column;
 }
 
-@media (max-width: 767px) {
-  .app-shell { flex-direction: column; }
-  .main-content { padding: 1rem; }
+.machine-panel-header {
+  background: #c8c8c8;
+  border-bottom: 2px solid #999;
+  padding: 8px 14px;
+  font-size: 1rem;
+  font-weight: 600;
+  text-align: center;
 }
 
 /* =====================
    Sidebar
    ===================== */
 .sidebar {
-  width: 230px;
+  width: 280px;
   min-height: 100vh;
   flex-shrink: 0;
-  background-color: #1a1d23 !important;
+  background-color: #d4d4d4;
+  border-right: 2px solid #999;
+  display: flex;
+  flex-direction: column;
 }
 
-.sidebar-brand {
-  font-size: 1rem;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  color: #fff;
-  padding: 0.25rem 0;
-  border-bottom: 1px solid rgba(255,255,255,0.1);
-  margin-bottom: 0.5rem;
+/* =====================
+   Nav Tabs (sidebar top)
+   ===================== */
+.nav-tabs {
+  display: flex;
+  border-bottom: 2px solid #999;
 }
 
-.sidebar .nav-link {
-  border-radius: 6px;
-  padding: 0.45rem 0.75rem;
-  font-size: 0.9rem;
-  color: rgba(255,255,255,0.7) !important;
-  transition: background 0.15s, color 0.15s;
-}
-
-.sidebar .nav-link:hover {
-  background-color: rgba(255,255,255,0.08);
-  color: #fff !important;
-}
-
-.active-link {
-  background-color: rgba(255,255,255,0.15) !important;
-  color: #fff !important;
+.nav-tab {
+  flex: 1;
+  padding: 8px 10px;
+  font-size: 0.82rem;
   font-weight: 600;
+  border: none;
+  background: #c8c8c8;
+  cursor: pointer;
+  border-right: 1px solid #999;
+  transition: background 0.15s;
+}
+.nav-tab:last-child { border-right: none; }
+.nav-tab.active { background: #e8e8e8; }
+.nav-tab:hover { background: #d8d8d8; }
+
+/* =====================
+   Sidebar Content & Footer
+   ===================== */
+.sidebar-content {
+  padding: 12px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.sidebar-footer {
+  padding: 10px 12px;
+  border-top: 2px solid #999;
+  display: flex;
+  gap: 8px;
 }
 
 /* =====================
@@ -71,29 +92,30 @@
    Stats Summary Cards
    ===================== */
 .stat-card {
-  background: #fff;
-  border-radius: 8px;
-  padding: 1rem 1.25rem;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  border: 2px solid #999;
+  background: white;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  font-weight: 500;
 }
 
-.stat-value {
-  font-size: 1.75rem;
-  font-weight: 700;
-  line-height: 1;
-  color: #212529;
+.stat-card .stat-value {
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 1.1rem;
+  font-weight: 600;
 }
 
-.stat-label {
-  font-size: 0.78rem;
-  color: #6c757d;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-top: 0.25rem;
-}
+.stat-card.healthy .stat-value  { color: #4caf50; }
+.stat-card.warning .stat-value  { color: #c8880a; }
+.stat-card.critical .stat-value { color: #e53935; }
 
 /* =====================
    Accordion Row Headers
+   (kept until Task F-1 removes the Accordion layout)
    ===================== */
 .accordion-row-label {
   font-weight: 700;
@@ -120,6 +142,7 @@
 
 /* =====================
    Slot Cards
+   (kept until Tasks F-2 / F-3 replace them)
    ===================== */
 .slot-card {
   border-radius: 8px;
@@ -167,6 +190,7 @@
 
 /* =====================
    Status Badge
+   (kept until Task F-2 removes StatusIndicator)
    ===================== */
 .status-badge {
   font-size: 0.65rem;

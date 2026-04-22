@@ -4,8 +4,9 @@ backend/app/api/inventory_routes.py
 =====================================
 Flask Blueprint for inventory-related endpoints.
 
-Covers Tasks B-12 (GET /api/inventory), B-13 (POST /api/restock), and the
-D-2 requirement that ConcurrencyError maps to HTTP 409 Conflict.
+Covers Tasks B-12 (GET /api/inventory), B-13 (POST /api/restock),
+B-1 (POST /api/purchase), and the D-2 requirement that ConcurrencyError
+maps to HTTP 409 Conflict.
 """
 
 from flask import Blueprint, jsonify, request
@@ -93,6 +94,57 @@ def restock_slot():
         return jsonify({"error": str(exc), "status": 400}), 400
 
     # D-2: optimistic concurrency guard
+    except ConcurrencyError as exc:
+        return jsonify({"error": str(exc), "status": 409}), 409
+
+    except Exception as exc:
+        return jsonify({"error": str(exc), "status": 500}), 500
+    
+
+# ---------------------------------------------------------------------------
+# POST /api/purchase
+# ---------------------------------------------------------------------------
+
+@inventory_bp.route("/api/purchase", methods=["POST"])
+def purchase_slot():
+    """
+    Purchase one or more units from a slot.
+
+    Request body (JSON):
+        { "slot_id": "A1", "quantity": 1 }
+
+    Success (200):
+        Updated slot dict  +  { "message": "Purchase successful" }
+
+    Failure responses:
+        400 — missing/invalid fields, or unknown slot_id
+        409 — ConcurrencyError (D-2): out-of-stock, expired, or race condition
+        500 — unexpected server error
+    """
+    body = request.get_json(silent=True)
+    if not body:
+        return jsonify({"error": "Request body must be JSON.", "status": 400}), 400
+
+    slot_id  = body.get("slot_id")
+    quantity = body.get("quantity", 1)
+
+    if not slot_id:
+        return jsonify({"error": "Missing required field: slot_id.", "status": 400}), 400
+    
+    if not isinstance(quantity, int) or isinstance(quantity, bool):
+        return jsonify({"error": "quantity must be an integer.", "status": 400}), 400
+
+    try:
+        updated_slot = _service.purchase_slot(slot_id, quantity)
+        return jsonify({**updated_slot, "message": "Purchase successful"}), 200
+
+    except LookupError as exc:
+        return jsonify({"error": str(exc), "status": 400}), 400
+
+    except ValueError as exc:
+        return jsonify({"error": str(exc), "status": 400}), 400
+
+    # D-2: optimistic concurrency guard — out-of-stock, expired, or race
     except ConcurrencyError as exc:
         return jsonify({"error": str(exc), "status": 409}), 409
 

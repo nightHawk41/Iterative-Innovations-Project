@@ -1,62 +1,78 @@
-import React, { useState } from "react";
-import { NavLink } from "react-router-dom";
+import React, { useState, useEffect } from 'react';
+import AlertsBanner from './AlertsBanner';
+import TransactionUpload from './TransactionUpload';
+import RestockModal from './RestockModal';
+import mockInventory from '../data/mockInventory';
 
-function Sidebar() {
-  const [collapsed, setCollapsed] = useState(false);
+function Sidebar({ activeTab, setActiveTab, slots, onRestockSuccess }) {
+  // slots and onRestockSuccess are passed down from App.js,
+  // which now owns the shared inventory state.
+  const [showModal, setShowModal] = useState(false);
 
-  const linkClass = ({ isActive }) =>
-    "nav-link text-white" + (isActive ? " active-link" : "");
+  const total    = slots.length;
+  const critical = slots.filter(s => (s.status_color || '').toLowerCase() === 'red').length;
+  const warning  = slots.filter(s => (s.status_color || '').toLowerCase() === 'yellow').length;
+  const healthy  = slots.filter(s => (s.status_color || '').toLowerCase() === 'green').length;
 
   return (
-    <>
-      {/* Mobile top bar — visible only on small screens */}
-      <nav className="navbar navbar-dark bg-dark d-md-none px-3">
-        <span className="navbar-brand fw-bold">UMBC Vending</span>
+    <aside className="sidebar">
+      <div className="nav-tabs">
         <button
-          className="navbar-toggler"
-          type="button"
-          onClick={() => setCollapsed(!collapsed)}
-          aria-expanded={collapsed}
-          aria-label="Toggle navigation"
+          className={`nav-tab ${activeTab === 'dashboard' ? 'active' : ''}`}
+          onClick={() => setActiveTab('dashboard')}
         >
-          <span className="navbar-toggler-icon" />
+          Dashboard
         </button>
-        {collapsed && (
-          <div className="w-100 mt-2">
-            <ul className="navbar-nav">
-              <li className="nav-item">
-                <NavLink to="/dashboard" className={linkClass} onClick={() => setCollapsed(false)}>
-                  Dashboard
-                </NavLink>
-              </li>
-              <li className="nav-item">
-                <NavLink to="/admin" className={linkClass} onClick={() => setCollapsed(false)}>
-                  Admin Panel
-                </NavLink>
-              </li>
-            </ul>
-          </div>
-        )}
-      </nav>
+        <button
+          className={`nav-tab ${activeTab === 'admin' ? 'active' : ''}`}
+          onClick={() => setActiveTab('admin')}
+        >
+          Admin Panel
+        </button>
+      </div>
 
-      {/* Desktop sidebar — visible only on md+ screens */}
-      <nav className="sidebar d-none d-md-flex flex-column bg-dark text-white p-3">
-        <h5 className="sidebar-brand">UMBC Vending</h5>
-        <hr className="border-secondary" />
-        <ul className="nav flex-column gap-1">
-          <li className="nav-item">
-            <NavLink to="/dashboard" className={linkClass}>
-              Dashboard
-            </NavLink>
-          </li>
-          <li className="nav-item">
-            <NavLink to="/admin" className={linkClass}>
-              Admin Panel
-            </NavLink>
-          </li>
-        </ul>
-      </nav>
-    </>
+      {activeTab === 'dashboard' && (
+        <div className="sidebar-content" id="sidebar-dashboard">
+          <div className="stat-card">
+            <span>Total Slots</span>
+            <span className="stat-value">{total}</span>
+          </div>
+          <div className="stat-card healthy">
+            <span>Healthy</span>
+            <span className="stat-value">{healthy}</span>
+          </div>
+          <div className="stat-card warning">
+            <span>Low / Expiring</span>
+            <span className="stat-value">{warning}</span>
+          </div>
+          <div className="stat-card critical">
+            <span>Critical / Out</span>
+            <span className="stat-value">{critical}</span>
+          </div>
+          <AlertsBanner />
+        </div>
+      )}
+
+      {activeTab === 'admin' && (
+        <div className="sidebar-content" id="sidebar-admin">
+          <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+            + Manual Restock
+          </button>
+          <TransactionUpload />
+        </div>
+      )}
+
+      <div className="sidebar-footer">
+        {/* Task F-6: Reload / Help buttons go here */}
+      </div>
+
+      <RestockModal
+        show={showModal}
+        onHide={() => setShowModal(false)}
+        slots={slots}
+        onRestockSuccess={onRestockSuccess}
+      />
+    </aside>
   );
 }
 
