@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { Modal, Button, Form, Alert } from "react-bootstrap";
 import { showToast } from "../utils/toast";
 
 function getTodayString() {
@@ -134,90 +133,95 @@ function RestockModal({ show, onHide, slots, onRestockSuccess }) {
   const showError = (name) => touched[name] && errors[name];
 
   return (
-    <Modal show={show} onHide={handleClose} centered>
-      <Modal.Header closeButton>
-        <Modal.Title>Manual Restock</Modal.Title>
-      </Modal.Header>
+    <div className={`modal-overlay${show ? " modal-overlay--visible" : ""}`} style={{ display: show ? "flex" : "none" }}>
+      <div className="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="restock-modal-title">
+        <div className="modal-header">
+          <h5 className="modal-title" id="restock-modal-title">Manual Restock</h5>
+          <button type="button" className="btn-close" onClick={handleClose} aria-label="Close" />
+        </div>
 
-      <Form onSubmit={handleSubmit} noValidate>
-        <Modal.Body>
-          {/* Slot ID */}
-          <Form.Group className="mb-3" controlId="slotId">
-            <Form.Label>Slot ID</Form.Label>
-            <Form.Select
-              value={slotId}
-              onChange={handleSlotChange}
-              onBlur={(e)  => handleBlur("slotId", e.target.value)}
-              isInvalid={!!showError("slotId")}
-            >
-              <option value="">-- Select a slot --</option>
-              {slots.map((slot) => (
-                <option key={slot.slot_id} value={slot.slot_id}>
-                  {slot.slot_id} — {slot.item_name} (Current: {slot.quantity}/10)
-                </option>
-              ))}
-            </Form.Select>
-            <Form.Control.Feedback type="invalid">
-              {errors.slotId}
-            </Form.Control.Feedback>
-          </Form.Group>
+        <form onSubmit={handleSubmit} noValidate>
+          <div className="modal-body">
+            {/* Slot ID */}
+            <div className="form-group mb-3">
+              <label htmlFor="slotId" className="form-label">Slot ID</label>
+              <select
+                id="slotId"
+                className={`form-select${showError("slotId") ? " is-invalid" : ""}`}
+                value={slotId}
+                onChange={handleSlotChange}
+                onBlur={(e) => handleBlur("slotId", e.target.value)}
+              >
+                <option value="">-- Select a slot --</option>
+                {slots.map((slot) => (
+                  <option key={slot.slot_id} value={slot.slot_id}>
+                    {slot.slot_id} — {slot.item_name} (Current: {slot.quantity}/10)
+                  </option>
+                ))}
+              </select>
+              {showError("slotId") && (
+                <div className="invalid-feedback" role="alert">{errors.slotId}</div>
+              )}
+            </div>
 
-          {/* Quantity */}
-          <Form.Group className="mb-3" controlId="quantity">
-            <Form.Label>Quantity Added</Form.Label>
-            <Form.Control
-              type="number"
-              min="1"
-              step="1"
-              placeholder="e.g. 5"
-              value={quantity}
-              onChange={(e) => {
-                setQuantity(e.target.value);
-                if (touched.quantity) {
-                  setErrors((prev) => ({ ...prev, quantity: validateField("quantity", e.target.value, maxQuantity) }));
-                }
-              }}
-              onBlur={(e)  => handleBlur("quantity", e.target.value)}
-              isInvalid={!!showError("quantity")}
-            />
-            
-            <Form.Control.Feedback type="invalid">
-              {errors.quantity}
-            </Form.Control.Feedback>
-          </Form.Group>
+            {/* Quantity */}
+            <div className="form-group mb-3">
+              <label htmlFor="quantity" className="form-label">Quantity Added</label>
+              <input
+                id="quantity"
+                type="number"
+                min="1"
+                step="1"
+                placeholder="e.g. 5"
+                className={`form-control${showError("quantity") ? " is-invalid" : ""}`}
+                value={quantity}
+                onChange={(e) => {
+                  setQuantity(e.target.value);
+                  if (touched.quantity) {
+                    setErrors((prev) => ({ ...prev, quantity: validateField("quantity", e.target.value, maxQuantity) }));
+                  }
+                }}
+                onBlur={(e) => handleBlur("quantity", e.target.value)}
+              />
+              {showError("quantity") && (
+                <div className="invalid-feedback" role="alert">{errors.quantity}</div>
+              )}
+            </div>
 
-          {/* Expiration Date */}
-          <Form.Group className="mb-3" controlId="expirationDate">
-            <Form.Label>Expiration Date</Form.Label>
-            <Form.Control
-              type="date"
-              min={getTodayString()}
-              value={expirationDate}
-              onChange={(e) => setExpDate(e.target.value)}
-              onBlur={(e)  => handleBlur("expirationDate", e.target.value)}
-              isInvalid={!!showError("expirationDate")}
-            />
-            <Form.Control.Feedback type="invalid">
-              {errors.expirationDate}
-            </Form.Control.Feedback>
-          </Form.Group>
-        </Modal.Body>
+            {/* Expiration Date */}
+            <div className="form-group mb-3">
+              <label htmlFor="expirationDate" className="form-label">Expiration Date</label>
+              <input
+                id="expirationDate"
+                type="date"
+                min={getTodayString()}
+                className={`form-control${showError("expirationDate") ? " is-invalid" : ""}`}
+                value={expirationDate}
+                onChange={(e) => setExpDate(e.target.value)}
+                onBlur={(e) => handleBlur("expirationDate", e.target.value)}
+              />
+              {showError("expirationDate") && (
+                <div className="invalid-feedback" role="alert">{errors.expirationDate}</div>
+              )}
+            </div>
+          </div>
 
-        <Modal.Footer>
-          {apiError && (
-            <Alert variant="danger" className="w-100 mb-2">
-              {apiError}
-            </Alert>
-          )}
-          <Button variant="secondary" onClick={handleClose} disabled={submitting}>
-            Cancel
-          </Button>
-          <Button variant="primary" type="submit" disabled={submitting}>
-            {submitting ? "Submitting…" : "Restock"}
-          </Button>
-        </Modal.Footer>
-      </Form>
-    </Modal>
+          <div className="modal-footer">
+            {apiError && (
+              <div className="alert alert-danger w-100 mb-2" role="alert">
+                {apiError}
+              </div>
+            )}
+            <button type="button" className="btn btn-secondary" onClick={handleClose} disabled={submitting}>
+              Cancel
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={submitting}>
+              {submitting ? "Submitting…" : "Restock"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
 

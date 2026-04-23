@@ -8,10 +8,6 @@ jest.mock("../utils/toast", () => ({
   showToast: jest.fn(),
 }));
 
-jest.mock("./AlertsBanner", () => function AlertsBanner() {
-  return <div data-testid="alerts-banner" />;
-});
-
 describe("Sidebar", () => {
   beforeEach(() => {
     global.fetch = jest.fn();

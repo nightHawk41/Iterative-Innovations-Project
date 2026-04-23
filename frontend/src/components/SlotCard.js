@@ -1,5 +1,4 @@
 import React from "react";
-import StatusIndicator from "./StatusIndicator";
 
 // Lowercase keys to match backend
 const BORDER_COLOR = {
@@ -38,7 +37,7 @@ function SlotCard({ slot_id, item_name, quantity, price, days_until_expiry, stat
       <div className="card-body d-flex flex-column p-2 gap-1">
         <div className="d-flex justify-content-between align-items-center">
           <span className="slot-id">{slot_id}</span>
-          <StatusIndicator status_color={safeColor} />
+          <span className={`status-badge status-badge--${safeColor}`}>{safeColor}</span>
         </div>
         <p className="card-title fw-semibold mb-1 slot-item-name">{item_name}</p>
         <div className="slot-quantity">{quantity}</div>

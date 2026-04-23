@@ -89,7 +89,7 @@ function App() {
     }
   }
 
-  useEffect(() => { fetchInventory(); }, []);
+    useEffect(() => { fetchInventory(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="app-wrapper">
