@@ -1,18 +1,18 @@
 import React, { useRef, useState } from "react";
 import { showToast } from "../utils/toast";
 
-function InventoryUpload({ onInventoryUpdated }) {
+function InventoryUpload({ onSuccess }) {
   const inputRef = useRef(null);
   const [file, setFile] = useState(null);
-  const [feedback, setFeedback] = useState(null);
-  const [readyToApply, setReadyToApply] = useState(false);
+  const [feedback, setFeedback] = useState({ message: "", type: "" });
+  const [updateEnabled, setUpdateEnabled] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [applying, setApplying] = useState(false);
 
   function resetPanel() {
     setFile(null);
-    setFeedback(null);
-    setReadyToApply(false);
+    setFeedback({ message: "", type: "" });
+    setUpdateEnabled(false);
 
     if (inputRef.current) {
       inputRef.current.value = "";
@@ -21,8 +21,8 @@ function InventoryUpload({ onInventoryUpdated }) {
 
   function handleFileChange(event) {
     setFile(event.target.files[0] ?? null);
-    setFeedback(null);
-    setReadyToApply(false);
+    setFeedback({ message: "", type: "" });
+    setUpdateEnabled(false);
   }
 
   async function handleUpload(event) {
@@ -30,18 +30,18 @@ function InventoryUpload({ onInventoryUpdated }) {
 
     if (!file) {
       setFeedback({ type: "error", message: "Please select a CSV file." });
-      setReadyToApply(false);
+      setUpdateEnabled(false);
       return;
     }
 
     if (!file.name.toLowerCase().endsWith(".csv")) {
       setFeedback({ type: "error", message: "Only .csv files are accepted." });
-      setReadyToApply(false);
+      setUpdateEnabled(false);
       return;
     }
 
     setUploading(true);
-    setFeedback(null);
+    setFeedback({ message: "", type: "" });
 
     try {
       const formData = new FormData();
@@ -55,7 +55,7 @@ function InventoryUpload({ onInventoryUpdated }) {
 
       if (!response.ok) {
         setFeedback({ type: "error", message: data.error ?? "Upload failed. Please try again." });
-        setReadyToApply(false);
+        setUpdateEnabled(false);
         return;
       }
 
@@ -63,17 +63,17 @@ function InventoryUpload({ onInventoryUpdated }) {
         type: "success",
         message: `✓ ${data.total_rows} slot(s) ready to update.`,
       });
-      setReadyToApply(true);
+      setUpdateEnabled(true);
     } catch (error) {
       setFeedback({ type: "error", message: "Network error. Is the backend running?" });
-      setReadyToApply(false);
+      setUpdateEnabled(false);
     } finally {
       setUploading(false);
     }
   }
 
   async function handleApply() {
-    if (!readyToApply) {
+    if (!updateEnabled) {
       return;
     }
 
@@ -90,80 +90,73 @@ function InventoryUpload({ onInventoryUpdated }) {
       const data = await response.json();
 
       if (!response.ok) {
-        setFeedback({ type: "error", message: data.error ?? "Inventory update failed. Please try again." });
-        setReadyToApply(false);
+        showToast(data.error ?? "Inventory update failed. Please try again.");
         return;
       }
 
       showToast("✓ Inventory updated.");
-      await onInventoryUpdated?.();
+      await onSuccess?.();
       resetPanel();
     } catch (error) {
-      setFeedback({ type: "error", message: "Network error. Is the backend running?" });
-      setReadyToApply(false);
+      showToast("Network error. Is the backend running?");
     } finally {
       setApplying(false);
     }
   }
 
   return (
-    <div className="card mt-4">
-      <div className="card-header fw-semibold">Upload New Inventory CSV</div>
-      <div className="card-body">
-        <div className="small text-muted mb-3">
-          <div><strong>Required:</strong> ROW, Product, Vending Price</div>
-          <div><strong>Optional:</strong> stock (integer 0–10), expiration_date (YYYY-MM-DD)</div>
-        </div>
-
-        <form onSubmit={handleUpload}>
-          <div className="mb-3">
-            <input
-              ref={inputRef}
-              className="form-control"
-              type="file"
-              accept=".csv"
-              aria-label="Inventory CSV file"
-              onChange={handleFileChange}
-            />
-          </div>
-
-          <div className="d-flex gap-2 mb-3">
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={uploading || applying}
-            >
-              {uploading ? "Processing…" : "Upload & Process"}
-            </button>
-            <button
-              type="button"
-              className="btn btn-outline-secondary"
-              disabled={uploading || applying}
-              onClick={resetPanel}
-            >
-              Clear
-            </button>
-          </div>
-
-          {feedback && (
-            <div className={`alert py-2 ${feedback.type === "success" ? "alert-success" : "alert-danger"}`}>
-              {feedback.message}
-            </div>
-          )}
-
-          <hr />
-
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={!readyToApply || uploading || applying}
-            onClick={handleApply}
-          >
-            {applying ? "Updating…" : "Update Inventory"}
-          </button>
-        </form>
+    <form onSubmit={handleUpload}>
+      <div className="csv-hint">
+        <div><strong>Required:</strong> ROW, Product, Vending Price</div>
+        <div><strong>Optional:</strong> stock (integer 0-10), expiration_date (YYYY-MM-DD)</div>
       </div>
-    </div>
+
+      <div className="mb-3">
+        <input
+          ref={inputRef}
+          className="form-control"
+          type="file"
+          accept=".csv"
+          aria-label="Inventory CSV file"
+          onChange={handleFileChange}
+        />
+      </div>
+
+      <div className="btn-row">
+        <button
+          type="submit"
+          className="btn primary"
+          disabled={uploading || applying}
+        >
+          {uploading ? "Processing…" : "Upload & Process"}
+        </button>
+        <button
+          type="button"
+          className="btn"
+          disabled={uploading || applying}
+          onClick={resetPanel}
+        >
+          Clear
+        </button>
+      </div>
+
+      {feedback.message ? (
+        <div className={`csv-feedback ${feedback.type === "success" ? "success" : "error"}`}>
+          {feedback.message}
+        </div>
+      ) : null}
+
+      <hr className="panel-divider" />
+
+      <button
+        type="button"
+        className="full-width-btn"
+        disabled={!updateEnabled || uploading || applying}
+        onClick={handleApply}
+      >
+        {applying ? "Updating..." : "Update Inventory"}
+      </button>
+    </form>
   );
 }
 

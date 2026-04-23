@@ -33,7 +33,7 @@ function AdminTab({ slots, onInventoryChange }) {
         isOpen={openPanel === 'inv'}
         onToggle={() => togglePanel('inv')}
       >
-        <InventoryUpload onInventoryUpdated={onInventoryChange} />
+        <InventoryUpload onSuccess={onInventoryChange} />
       </AccordionPanel>
 
       <hr className="panel-divider" />

@@ -18,14 +18,14 @@ describe("InventoryUpload", () => {
   });
 
   it("restricts the file input to .csv and keeps Update Inventory disabled by default", () => {
-    render(<InventoryUpload onInventoryUpdated={jest.fn()} />);
+    render(<InventoryUpload onSuccess={jest.fn()} />);
 
     expect(screen.getByLabelText("Inventory CSV file")).toHaveAttribute("accept", ".csv");
     expect(screen.getByRole("button", { name: "Update Inventory" })).toBeDisabled();
   });
 
   it("uploads the csv with FormData field name file and enables Update Inventory on success", async () => {
-    render(<InventoryUpload onInventoryUpdated={jest.fn()} />);
+    render(<InventoryUpload onSuccess={jest.fn()} />);
 
     global.fetch.mockImplementationOnce(async (url, options) => {
       expect(url).toBe("/api/inventory/upload");
@@ -56,9 +56,9 @@ describe("InventoryUpload", () => {
   });
 
   it("calls apply, refreshes inventory, shows a toast, and resets the panel", async () => {
-    const onInventoryUpdated = jest.fn().mockResolvedValue([]);
+    const onSuccess = jest.fn().mockResolvedValue([]);
 
-    render(<InventoryUpload onInventoryUpdated={onInventoryUpdated} />);
+    render(<InventoryUpload onSuccess={onSuccess} />);
 
     global.fetch
       .mockResolvedValueOnce({
@@ -97,7 +97,7 @@ describe("InventoryUpload", () => {
     await userEvent.click(screen.getByRole("button", { name: "Update Inventory" }));
 
     await waitFor(() => {
-      expect(onInventoryUpdated).toHaveBeenCalledTimes(1);
+      expect(onSuccess).toHaveBeenCalledTimes(1);
     });
 
     expect(showToast).toHaveBeenCalledWith("✓ Inventory updated.");
@@ -107,7 +107,7 @@ describe("InventoryUpload", () => {
   });
 
   it("clear resets the selected file, feedback, and update button state", async () => {
-    render(<InventoryUpload onInventoryUpdated={jest.fn()} />);
+    render(<InventoryUpload onSuccess={jest.fn()} />);
 
     global.fetch.mockResolvedValueOnce({
       ok: true,
@@ -136,7 +136,7 @@ describe("InventoryUpload", () => {
   });
 
   it("shows the API error inline and keeps Update Inventory disabled", async () => {
-    render(<InventoryUpload onInventoryUpdated={jest.fn()} />);
+    render(<InventoryUpload onSuccess={jest.fn()} />);
 
     global.fetch.mockResolvedValueOnce({
       ok: false,
@@ -149,5 +149,40 @@ describe("InventoryUpload", () => {
 
     expect(await screen.findByText("CSV schema invalid.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Update Inventory" })).toBeDisabled();
+  });
+
+  it("shows toast error when apply endpoint returns API failure", async () => {
+    render(<InventoryUpload onSuccess={jest.fn()} />);
+
+    global.fetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          added: 0,
+          updated: 24,
+          skipped: 0,
+          total_rows: 24,
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({ error: "Apply failed." }),
+      });
+
+    const file = new File(["ROW,Product,Vending Price\nA1,Snack,2.50"], "inventory.csv", {
+      type: "text/csv",
+    });
+
+    await userEvent.upload(screen.getByLabelText("Inventory CSV file"), file);
+    await userEvent.click(screen.getByRole("button", { name: "Upload & Process" }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Update Inventory" })).toBeEnabled();
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Update Inventory" }));
+
+    await waitFor(() => {
+      expect(showToast).toHaveBeenCalledWith("Apply failed.");
+    });
   });
 });
