@@ -12,10 +12,6 @@ jest.mock("./AlertsBanner", () => function AlertsBanner() {
   return <div data-testid="alerts-banner" />;
 });
 
-jest.mock("./RestockModal", () => function RestockModal() {
-  return null;
-});
-
 describe("Sidebar", () => {
   beforeEach(() => {
     global.fetch = jest.fn();
@@ -209,16 +205,18 @@ describe("Sidebar", () => {
 
     expect(restockHeader).toHaveTextContent("▸");
     expect(transactionHeader).toHaveTextContent("▸");
-    expect(screen.queryByRole("button", { name: "Open Restock Form" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Slot ID")).not.toBeInTheDocument();
 
     await userEvent.click(restockHeader);
     expect(restockHeader).toHaveTextContent("▾");
-    expect(screen.getByRole("button", { name: "Open Restock Form" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Slot ID")).toBeInTheDocument();
+    expect(screen.getByLabelText("Qty Added")).toBeInTheDocument();
+    expect(screen.getByLabelText("Exp Date")).toBeInTheDocument();
 
     await userEvent.click(transactionHeader);
     expect(transactionHeader).toHaveTextContent("▾");
     expect(restockHeader).toHaveTextContent("▸");
-    expect(screen.queryByRole("button", { name: "Open Restock Form" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Slot ID")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Transaction CSV file")).toBeInTheDocument();
   });
 

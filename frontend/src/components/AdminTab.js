@@ -2,12 +2,11 @@ import React, { useState } from 'react';
 import InventoryUpload from './InventoryUpload';
 import { generateSalesReport } from './SalesReport';
 import TransactionUpload from './TransactionUpload';
-import RestockModal from './RestockModal';
+import RestockForm from './RestockForm';
 import { showToast } from '../utils/toast';
 
 function AdminTab({ slots, onInventoryChange }) {
   const [openPanel, setOpenPanel] = useState(null);
-  const [showModal, setShowModal] = useState(false);
   const [reportReady, setReportReady] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
 
@@ -30,9 +29,7 @@ function AdminTab({ slots, onInventoryChange }) {
         isOpen={openPanel === 'restock'}
         onToggle={() => togglePanel('restock')}
       >
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-          Open Restock Form
-        </button>
+        <RestockForm slots={slots} onSuccess={onInventoryChange} />
       </AccordionPanel>
 
       <AccordionPanel
@@ -61,12 +58,6 @@ function AdminTab({ slots, onInventoryChange }) {
         {reportLoading ? 'Generating…' : 'Generate Sales Report'}
       </button>
 
-      <RestockModal
-        show={showModal}
-        onHide={() => setShowModal(false)}
-        slots={slots}
-        onRestockSuccess={onInventoryChange}
-      />
     </div>
   );
 }
