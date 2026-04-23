@@ -1308,5 +1308,3 @@ No import statements reference deleted files
 npm start runs without errors after deletions
 No console warnings about missing modules
 node_modules does not contain bootstrap or react-router-dom after uninstall
-
-
