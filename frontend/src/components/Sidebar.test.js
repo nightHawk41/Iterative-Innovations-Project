@@ -35,7 +35,7 @@ describe("Sidebar", () => {
         activeTab="admin"
         setActiveTab={jest.fn()}
         slots={[]}
-        onRestockSuccess={jest.fn()}
+        onInventoryChange={jest.fn()}
         onShowToast={jest.fn()}
       />
     );
@@ -43,14 +43,12 @@ describe("Sidebar", () => {
     const reportButton = screen.getByRole("button", { name: "Generate Sales Report" });
     expect(reportButton).toBeDisabled();
 
+    await userEvent.click(screen.getByRole("button", { name: "Upload Transaction CSV" }));
+
     const file = new File(["header\nvalue"], "transactions.csv", { type: "text/csv" });
     await userEvent.upload(screen.getByLabelText("Transaction CSV file"), file);
 
-    const transactionPanel = screen
-      .getByText("Upload Transaction CSV")
-      .closest(".card");
-
-    await userEvent.click(within(transactionPanel).getByRole("button", { name: "Upload & Process" }));
+    await userEvent.click(screen.getByRole("button", { name: "Upload & Process" }));
 
     await waitFor(() => {
       expect(reportButton).toBeEnabled();
@@ -108,20 +106,17 @@ describe("Sidebar", () => {
         activeTab="admin"
         setActiveTab={jest.fn()}
         slots={[]}
-        onRestockSuccess={jest.fn()}
-        onInventoryRefresh={jest.fn()}
+        onInventoryChange={jest.fn()}
         onShowToast={jest.fn()}
       />
     );
 
+    await userEvent.click(screen.getByRole("button", { name: "Upload Transaction CSV" }));
+
     const file = new File(["header\nvalue"], "transactions.csv", { type: "text/csv" });
     await userEvent.upload(screen.getByLabelText("Transaction CSV file"), file);
 
-    const transactionPanel = screen
-      .getByText("Upload Transaction CSV")
-      .closest(".card");
-
-    await userEvent.click(within(transactionPanel).getByRole("button", { name: "Upload & Process" }));
+    await userEvent.click(screen.getByRole("button", { name: "Upload & Process" }));
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Generate Sales Report" })).toBeEnabled();
@@ -160,20 +155,17 @@ describe("Sidebar", () => {
         activeTab="admin"
         setActiveTab={jest.fn()}
         slots={[]}
-        onRestockSuccess={jest.fn()}
-        onInventoryRefresh={jest.fn()}
+        onInventoryChange={jest.fn()}
         onShowToast={onShowToast}
       />
     );
 
+    await userEvent.click(screen.getByRole("button", { name: "Upload Transaction CSV" }));
+
     const file = new File(["header\nvalue"], "transactions.csv", { type: "text/csv" });
     await userEvent.upload(screen.getByLabelText("Transaction CSV file"), file);
 
-    const transactionPanel = screen
-      .getByText("Upload Transaction CSV")
-      .closest(".card");
-
-    await userEvent.click(within(transactionPanel).getByRole("button", { name: "Upload & Process" }));
+    await userEvent.click(screen.getByRole("button", { name: "Upload & Process" }));
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Generate Sales Report" })).toBeEnabled();
@@ -192,40 +184,102 @@ describe("Sidebar", () => {
         activeTab="admin"
         setActiveTab={jest.fn()}
         slots={[]}
-        onRestockSuccess={jest.fn()}
-        onInventoryRefresh={jest.fn()}
+        onInventoryChange={jest.fn()}
         onShowToast={jest.fn()}
       />
     );
 
-    expect(screen.getByText("Upload New Inventory CSV")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Upload New Inventory CSV" })).toBeInTheDocument();
+
+    userEvent.click(screen.getByRole("button", { name: "Upload New Inventory CSV" }));
     expect(screen.getByRole("button", { name: "Update Inventory" })).toBeDisabled();
   });
 
-  it("uses summary values for dashboard stat cards", () => {
+  it("opens only one admin accordion panel at a time and updates toggle arrows", async () => {
+    render(
+      <Sidebar
+        activeTab="admin"
+        setActiveTab={jest.fn()}
+        slots={[]}
+        onInventoryChange={jest.fn()}
+        onShowToast={jest.fn()}
+      />
+    );
+
+    const restockHeader = screen.getByRole("button", { name: /\+ Manual Restock/ });
+    const transactionHeader = screen.getByRole("button", { name: /Upload Transaction CSV/ });
+
+    expect(restockHeader).toHaveTextContent("▸");
+    expect(transactionHeader).toHaveTextContent("▸");
+    expect(screen.queryByRole("button", { name: "Open Restock Form" })).not.toBeInTheDocument();
+
+    await userEvent.click(restockHeader);
+    expect(restockHeader).toHaveTextContent("▾");
+    expect(screen.getByRole("button", { name: "Open Restock Form" })).toBeInTheDocument();
+
+    await userEvent.click(transactionHeader);
+    expect(transactionHeader).toHaveTextContent("▾");
+    expect(restockHeader).toHaveTextContent("▸");
+    expect(screen.queryByRole("button", { name: "Open Restock Form" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Transaction CSV file")).toBeInTheDocument();
+  });
+
+  it("computes dashboard stat cards from slot thresholds (not status_color)", () => {
     render(
       <Sidebar
         activeTab="dashboard"
         setActiveTab={jest.fn()}
         slots={[
-          { slot_id: "A1", status_color: "green" },
-          { slot_id: "A2", status_color: "green" },
+          { slot_id: "A1", quantity: 8, days_until_expiry: 10, status_color: "red" },
+          { slot_id: "A2", quantity: 4, days_until_expiry: 9, status_color: "green" },
+          { slot_id: "A3", quantity: 2, days_until_expiry: 9, status_color: "green" },
+          { slot_id: "A4", quantity: 7, days_until_expiry: 0, status_color: "green" },
         ]}
-        summary={{
-          total_slots: 2,
-          healthy: 0,
-          low_expiring: 1,
-          critical_out: 1,
-        }}
-        onRestockSuccess={jest.fn()}
-        onInventoryRefresh={jest.fn()}
+        onInventoryChange={jest.fn()}
         onShowToast={jest.fn()}
       />
     );
 
-    expect(screen.getByText("Total Slots").nextSibling).toHaveTextContent("2");
-    expect(screen.getByText("Healthy").nextSibling).toHaveTextContent("0");
+    expect(screen.getByText("Total Slots").nextSibling).toHaveTextContent("4");
+    expect(screen.getByText("Healthy").nextSibling).toHaveTextContent("1");
     expect(screen.getByText("Low / Expiring").nextSibling).toHaveTextContent("1");
-    expect(screen.getByText("Critical / Out").nextSibling).toHaveTextContent("1");
+    expect(screen.getByText("Critical / Out").nextSibling).toHaveTextContent("2");
+  });
+
+  it("calls onInventoryChange when Reload is clicked", async () => {
+    const onInventoryChange = jest.fn();
+
+    render(
+      <Sidebar
+        activeTab="dashboard"
+        setActiveTab={jest.fn()}
+        slots={[]}
+        onInventoryChange={onInventoryChange}
+        onShowToast={jest.fn()}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Reload" }));
+    expect(onInventoryChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows help message toast when Help is clicked", async () => {
+    const onShowToast = jest.fn();
+
+    render(
+      <Sidebar
+        activeTab="dashboard"
+        setActiveTab={jest.fn()}
+        slots={[]}
+        onInventoryChange={jest.fn()}
+        onShowToast={onShowToast}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Help" }));
+    expect(onShowToast).toHaveBeenCalledWith(
+      "Help: Green = healthy, Yellow = low/expiring, Red = critical/expired.",
+      "success"
+    );
   });
 });

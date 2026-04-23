@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import AppHeader from './components/AppHeader';
 import Sidebar from './components/Sidebar';
 import InventoryGrid from './components/InventoryGrid';
 import PurchaseModal from './components/PurchaseModal';
@@ -155,24 +156,28 @@ function App() {
   useEffect(() => { fetchInventory(); }, []);
 
   return (
-    <div className="app-body">
-      <Sidebar
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        slots={slots}
-        summary={summary}
-        onRestockSuccess={fetchInventory}
-        onInventoryRefresh={fetchInventory}
-        onShowToast={showToast}
-      />
-      <section className="machine-panel">
-        <div className="machine-panel-header">UMBC Vending Machine</div>
-        {error ? <div className="alert alert-danger m-3 mb-0">{error}</div> : null}
-        {loading
-          ? <div style={{ padding: '2rem', textAlign: 'center' }}>Loading…</div>
-          : <InventoryGrid slots={slots} activeTab={activeTab} onSlotSelect={handleSlotSelect} />
-        }
-      </section>
+    <div className="app-wrapper">
+      <AppHeader />
+
+      <div className="app-body">
+        <Sidebar
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          slots={slots}
+          summary={summary}
+          onInventoryChange={fetchInventory}
+          onShowToast={showToast}
+        />
+
+        <section className="machine-panel">
+          <div className="machine-panel-header">UMBC Vending Machine</div>
+          {error ? <div className="alert alert-danger m-3 mb-0">{error}</div> : null}
+          {loading
+            ? <div style={{ padding: '2rem', textAlign: 'center' }}>Loading…</div>
+            : <InventoryGrid slots={slots} activeTab={activeTab} onSlotSelect={handleSlotSelect} />
+          }
+        </section>
+      </div>
 
       <PurchaseModal
         show={Boolean(selectedSlot)}
