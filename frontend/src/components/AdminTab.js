@@ -1,25 +1,13 @@
 import React, { useState } from 'react';
 import InventoryUpload from './InventoryUpload';
-import { generateSalesReport } from './SalesReport';
 import TransactionUpload from './TransactionUpload';
 import RestockForm from './RestockForm';
-import { showToast } from '../utils/toast';
 
 function AdminTab({ slots, onInventoryChange }) {
   const [openPanel, setOpenPanel] = useState(null);
-  const [reportReady, setReportReady] = useState(false);
-  const [reportLoading, setReportLoading] = useState(false);
 
   function togglePanel(name) {
     setOpenPanel((prev) => (prev === name ? null : name));
-  }
-
-  async function handleGenerateSalesReport() {
-    setReportLoading(true);
-    await generateSalesReport({
-      onError: (message) => showToast(message),
-    });
-    setReportLoading(false);
   }
 
   return (
@@ -37,7 +25,7 @@ function AdminTab({ slots, onInventoryChange }) {
         isOpen={openPanel === 'txn'}
         onToggle={() => togglePanel('txn')}
       >
-        <TransactionUpload onReportReady={setReportReady} />
+        <TransactionUpload onSuccess={onInventoryChange} />
       </AccordionPanel>
 
       <AccordionPanel
@@ -49,14 +37,6 @@ function AdminTab({ slots, onInventoryChange }) {
       </AccordionPanel>
 
       <hr className="panel-divider" />
-
-      <button
-        className="btn btn-outline-secondary mt-3"
-        disabled={!reportReady || reportLoading}
-        onClick={handleGenerateSalesReport}
-      >
-        {reportLoading ? 'Generating…' : 'Generate Sales Report'}
-      </button>
 
     </div>
   );

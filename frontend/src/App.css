@@ -209,6 +209,36 @@ body {
 .btn.primary:hover { background: #333; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
+.csv-feedback {
+  font-size: 0.75rem;
+  margin: 6px 0;
+  padding: 5px 8px;
+  border-left: 3px solid var(--border);
+  background: white;
+}
+
+.csv-feedback.success { border-color: var(--green); color: #2a6e2a; }
+.csv-feedback.error { border-color: var(--red); color: #a01a1a; }
+
+.full-width-btn {
+  width: 100%;
+  text-align: left;
+  padding: 7px 10px;
+  border: 2px solid var(--border);
+  background: var(--panel-bg);
+  font-size: 0.83rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.15s;
+  margin-bottom: 8px;
+}
+
+.full-width-btn:hover:not(:disabled) { background: #d0d0d0; }
+.full-width-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
 .sidebar {
   width: 280px;
   min-height: 100vh;

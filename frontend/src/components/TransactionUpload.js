@@ -1,13 +1,23 @@
 import React, { useState } from "react";
+import { generateSalesReport } from "./SalesReport";
+import { showToast } from "../utils/toast";
 
-function TransactionUpload({ onReportReady }) {
+function TransactionUpload({ onSuccess }) {
   const [file, setFile]         = useState(null);
-  const [feedback, setFeedback] = useState(null);
+  const [feedback, setFeedback] = useState({ message: "", type: "" });
+  const [reportEnabled, setReportEnabled] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [reportLoading, setReportLoading] = useState(false);
+
+  function clearState() {
+    setFile(null);
+    setFeedback({ message: "", type: "" });
+    setReportEnabled(false);
+  }
 
   function handleFileChange(e) {
     setFile(e.target.files[0] ?? null);
-    setFeedback(null);
+    setFeedback({ message: "", type: "" });
   }
 
   async function handleUpload(e) {
@@ -20,7 +30,7 @@ function TransactionUpload({ onReportReady }) {
       setFeedback({ type: "error", message: "Only .csv files are accepted." });
       return;
     }
-    setFeedback(null);
+    setFeedback({ message: "", type: "" });
     setUploading(true);
     try {
       const formData = new FormData();
@@ -31,7 +41,7 @@ function TransactionUpload({ onReportReady }) {
       });
       const data = await response.json();
       if (!response.ok) {
-        onReportReady?.(false);
+        setReportEnabled(false);
         setFeedback({ type: "error", message: data.error ?? "Upload failed. Please try again." });
       } else {
         const unresolved = Array.isArray(data.unresolved_amounts) ? data.unresolved_amounts : [];
@@ -43,45 +53,72 @@ function TransactionUpload({ onReportReady }) {
           type: "success",
           message: `✓ ${data.processed_count} transaction(s) processed.${unresolvedSuffix}`,
         });
-        onReportReady?.(true);
+        setReportEnabled(true);
+        await onSuccess?.();
       }
     } catch (err) {
-      onReportReady?.(false);
+      setReportEnabled(false);
       setFeedback({ type: "error", message: "Network error. Is the backend running?" });
     } finally {
       setUploading(false);
     }
   }
 
+  async function handleGenerateSalesReport() {
+    setReportLoading(true);
+    await generateSalesReport({
+      onError: (message) => showToast(message),
+    });
+    setReportLoading(false);
+  }
+
   return (
-    <div className="card mt-4">
-      <div className="card-header fw-semibold">Upload Transaction CSV</div>
-      <div className="card-body">
-        <form onSubmit={handleUpload}>
-          <div className="mb-3">
-            <input
-              className="form-control"
-              type="file"
-              accept=".csv"
-              aria-label="Transaction CSV file"
-              onChange={handleFileChange}
-            />
-          </div>
-          {feedback && (
-            <div className={`alert py-2 ${feedback.type === "success" ? "alert-success" : "alert-danger"}`}>
-              {feedback.message}
-            </div>
-          )}
-          <button
-            type="submit"
-            className="btn btn-outline-primary"
-            disabled={uploading}
-          >
-            {uploading ? "Processing…" : "Upload & Process"}
-          </button>
-        </form>
+    <form onSubmit={handleUpload}>
+      <div className="mb-3">
+        <input
+          className="form-control"
+          type="file"
+          accept=".csv"
+          aria-label="Transaction CSV file"
+          onChange={handleFileChange}
+        />
       </div>
-    </div>
+
+      <div className="btn-row">
+        <button
+          type="submit"
+          className="btn primary"
+          disabled={uploading || reportLoading}
+        >
+          {uploading ? "Processing…" : "Upload & Process"}
+        </button>
+        <button
+          type="button"
+          className="btn"
+          disabled={uploading || reportLoading}
+          onClick={clearState}
+        >
+          Clear
+        </button>
+      </div>
+
+      {feedback.message ? (
+        <div className={`csv-feedback ${feedback.type === "success" ? "success" : "error"}`}>
+          {feedback.message}
+        </div>
+      ) : null}
+
+      <hr className="panel-divider" />
+
+      <button
+        type="button"
+        className="full-width-btn"
+        disabled={!reportEnabled || reportLoading}
+        onClick={handleGenerateSalesReport}
+      >
+        {reportLoading ? "Generating…" : "Generate Sales Report"}
+      </button>
+    </form>
   );
 }
 

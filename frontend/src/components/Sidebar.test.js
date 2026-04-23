@@ -40,10 +40,10 @@ describe("Sidebar", () => {
       />
     );
 
+    await userEvent.click(screen.getByRole("button", { name: "Upload Transaction CSV" }));
+
     const reportButton = screen.getByRole("button", { name: "Generate Sales Report" });
     expect(reportButton).toBeDisabled();
-
-    await userEvent.click(screen.getByRole("button", { name: "Upload Transaction CSV" }));
 
     const file = new File(["header\nvalue"], "transactions.csv", { type: "text/csv" });
     await userEvent.upload(screen.getByLabelText("Transaction CSV file"), file);
@@ -112,16 +112,19 @@ describe("Sidebar", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Upload Transaction CSV" }));
 
+    const reportButton = screen.getByRole("button", { name: "Generate Sales Report" });
+    expect(reportButton).toBeDisabled();
+
     const file = new File(["header\nvalue"], "transactions.csv", { type: "text/csv" });
     await userEvent.upload(screen.getByLabelText("Transaction CSV file"), file);
 
     await userEvent.click(screen.getByRole("button", { name: "Upload & Process" }));
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Generate Sales Report" })).toBeEnabled();
+      expect(reportButton).toBeEnabled();
     });
 
-    await userEvent.click(screen.getByRole("button", { name: "Generate Sales Report" }));
+    await userEvent.click(reportButton);
 
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith("/api/reports/sales");
@@ -158,16 +161,19 @@ describe("Sidebar", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Upload Transaction CSV" }));
 
+    const reportButton = screen.getByRole("button", { name: "Generate Sales Report" });
+    expect(reportButton).toBeDisabled();
+
     const file = new File(["header\nvalue"], "transactions.csv", { type: "text/csv" });
     await userEvent.upload(screen.getByLabelText("Transaction CSV file"), file);
 
     await userEvent.click(screen.getByRole("button", { name: "Upload & Process" }));
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Generate Sales Report" })).toBeEnabled();
+      expect(reportButton).toBeEnabled();
     });
 
-    await userEvent.click(screen.getByRole("button", { name: "Generate Sales Report" }));
+    await userEvent.click(reportButton);
 
     await waitFor(() => {
       expect(showToast).toHaveBeenCalledWith("Report failed.");
