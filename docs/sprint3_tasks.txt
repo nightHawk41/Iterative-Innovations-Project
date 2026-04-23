@@ -1,880 +1,1312 @@
-----------------------
-Current Sprint 3 Tasks
-----------------------
+Converting the Iterative Innovations' current codebase to look and act like a vending1.html
 
-Sprint 3 Goal:
-Revamp the frontend to match the vending.html prototype: a persistent 6x4 machine
-grid, sidebar with Dashboard/Admin tab switching, a slot purchase flow, admin panel
-enhancements, and the new backend endpoints that support them.
+Task Completion In Order:
+B-08 → B-02 → B-01 → B-03 → B-05 → B-04 → B-06 → B-07 → B-09 → B-10 → B-11 → B-12 → B-13 → B-14 → B-15 through B-21
+-------------------------------------------------
+Phase 1 — Expose What the Frontend Needs
+----------------------------------------------------
+B-08: Fix timestamp parsing for AM/PM format
+_parse_timestamp() currently tries %m/%d/%Y %H:%M:%S (24-hour) but transaction_stream.txt uses %m/%d/%Y %I:%M:%S %p (12-hour AM/PM). Add this format to the list of patterns tried:
+pythonfor fmt in (
+    "%m/%d/%Y %I:%M:%S %p",   # ADD THIS — matches transaction_stream.txt
+    "%m/%d/%Y %H:%M:%S",
+    "%m/%d/%Y",
+    "%Y-%m-%d",
+):
+B-02: Add slot_id label format validation
+vending.html uses labels like A0, A1, A2, A3 (0-indexed columns). The current inventory_config.csv uses A1–A4 (1-indexed). Decide on one convention and apply it consistently to the seed file, the config CSV, and the frontend slot label generator (slotLabel(i)). The decision is to use A1–A4 (1-indexed). 
 
-Already Completed (no action needed):
-  - Routing defaults: wildcard route redirects to /dashboard (App.js)
-  - Dashboard stats header: Total Slots, Healthy, Low/Expiring, Critical (DashboardPage.js)
-  - Transaction CSV file picker and POST /api/transactions/process call (TransactionUpload.js)
+B-01: Add GET /api/inventory endpoint response alignment
+The frontend reads slot_id, item_name, price, quantity, days_until_expiry, and status_color. Verify to_dict() on ItemSlot returns all of these with matching key names. Currently, days_until_expiry is returned, but vending.html uses days_until_expiration — standardize one name across the backend and frontend. The decision is to use days_until_expiry.
 
-Implementation Order Note:
-Backend tasks should be completed before the frontend tasks that depend on them.
-Frontend tasks marked with [DEPENDS ON ...] must wait for the referenced backend task.
-Resolve the architecture decision in Task A-1 before beginning any Phase 1 frontend work.
+B-03: Add GET /api/inventory/summary endpoint
+The Dashboard tab shows the counts for Total Slots, Healthy, Low/Expiring, and Critical/Out. Currently, these are computed in JavaScript. Add a backend endpoint that returns these four counts so the frontend can fetch live data instead of computing from the full inventory list.
+---------------------------------------------------------------
+Phase 2 — Purchase Flow (Single-Item Grid Purchase)
+----------------------------------------------------------------
+B-05: Add CBORD transaction log builder utility
+Extract the random patron data generation from the purchase flow into a reusable utility function. This mirrors logTransaction() in vending.html and should generate:
+A random Primary Key (auto-incrementing patron ID)
+A random Patron Name from a predefined list
+A random SV&C Plan (35 RETRIEVER, 45 DEPT., 40 COMMUTER)
+A random Period (Breakfast, Lunch, Afternoon, Dinner, Evening)
+Current timestamp as Transaction Date
+Location hardcoded to 1499 Lib_Sup
+Tran Amt set to the slot's price
+Stat hardcoded to C
 
-------------------------------------------------------------
-ARCHITECTURE DECISION
-------------------------------------------------------------
+B-04: Add POST /api/purchase endpoint
+vending.html allows users to click a slot and confirm a purchase. Currently there is no endpoint for a single ad-hoc purchase outside of CSV processing. This endpoint should:
+Accept { "slot_id": "A1" } in the request body
+Look up the slot by slot_id
+Verify stock > 0 and item is not expired
+Decrement stock by 1
+Generate and persist a CBORD-style Transaction record with randomized patron data (matching the logTransaction() behavior in vending.html)
+Return the updated slot dict
+Return 409 if out of stock (D-2 safeguard)
+Return 400 if slot is expired or does not exist
 
-[TASK A-1] Migrate the app shell to the prototype's persistent two-column layout.
-  Decision: adopt the prototype layout -- sidebar with Dashboard/Admin tab switching,
-  machine grid always visible on the right, no page-level navigation.
+B-06: Add GET /api/transactions endpoint
+The Generate Sales Report button needs access to all logged transactions — both from grid purchases and from uploaded CSVs. Add an endpoint that returns all Transaction rows, ordered by timestamp descending, serialized to dict.
+------------------------------------------------
+Phase 3 — Transaction CSV Upload
+------------------------------------------------
+B-07: Verify POST /api/transactions/process handles the mock CBORD format
+The existing endpoint accepts a CSV file upload and processes it through TransactionProcessor. Verify that the mock CSV format from transaction_stream_mock.csv (Transaction Date, Transaction Time, Location, SV&C Plan, Primary Key, Patron Name, Tran Amt, Amt Remain, Tax, Period, Stat) parses correctly end-to-end. The _parse_timestamp() method needs to handle the M-D-YYYY, H:MM:SS AM/PM format present in transaction_stream_mock.csv. 
 
-  Required changes to the existing codebase:
-    - App.js: remove React Router (<Routes>, <Route>, <Navigate>). Replace with a
-      two-column shell: left sidebar (fixed width) + right machine panel (flex: 1).
-      A single tab state value ("dashboard" | "admin") controls which sidebar content
-      is visible; the machine grid renders unconditionally in the right panel.
-    - Sidebar.js: remove NavLink-based navigation. Replace with two tab buttons
-      (Dashboard / Admin) that toggle the sidebar content via the tab state.
-    - DashboardPage.js: dissolve this page component. Move its stats header and
-      AlertsBanner into the Dashboard tab content area of the sidebar.
-    - AdminPage.js: dissolve this page component. Move its admin controls
-      (restock, CSV uploads, sales report) into the Admin tab content area.
-      The InventoryGrid inside AdminPage is removed; the grid is now the shared
-      right panel and does not belong to either tab.
-    - Remove react-router-dom from the project if no other code uses it after
-      the migration, and remove the corresponding import in index.js.
+--------------------------------------------
+Phase 4 — Sales Report Generation
+---------------------------------------------
+B-10: Add GET /api/reports/sales endpoint
+The Generate Sales Report button currently calls openSalesReport() using in-memory data. Move report aggregation to the backend. This endpoint should:
+Read all Transaction rows from the database that have a non-null resolved_slot_id
+Join against ItemSlot to get item_name
+Aggregate by item: units sold, total revenue, average price
+Return sorted by total revenue descending
+Include summary fields: total_revenue, total_units, unique_items, date_range, generated_at, top_item
 
-------------------------------------------------------------
-FRONTEND: Phase 1 -- Vending Machine Grid
-------------------------------------------------------------
+B-11: Add report availability guard
+The Generate Sales Report button should only be enabled when at least one transaction exists. Add a field to the GET /api/reports/sales response (or a separate GET /api/transactions/count endpoint) so the frontend can check whether any transactions are logged before enabling the button.
+--------------------------------------------
+Phase 5 — Inventory CSV Upload
+--------------------------------------------
+B-12: Add POST /api/inventory/upload endpoint
+vending.html has an Upload New Inventory CSV panel that updates item names, prices, and optionally stock and expiration. This maps to the existing POST /api/admin/sync-inventory-config endpoint, but that endpoint reads from a file path on disk rather than accepting a file upload. Modify it (or add a new endpoint) to accept a multipart file upload with the inventory_config.csv column structure (ROW, Product, Vending Price, optional stock, optional expiration_date).
+B-13: Handle optional stock and expiration_date columns in seed
+The current seed_database() function ignores stock and expiration_date from the CSV and uses COLUMN_TEST_PROFILE instead. Update _parse_inventory_config() and seed_database() to read and apply stock and expiration_date if those columns are present, preserving existing values if they are absent — matching the behavior implemented in parseInventoryCSV() and applyInventoryUpdate() in vending.html.
+-------------------------------------
+Phase 6 — Manual Restock
+-------------------------------------
+B-14: Verify POST /api/restock matches frontend validation rules
+vending.html enforces that quantity cannot exceed 10 - current_stock. The backend restock() method on ItemSlot already enforces this with a ValueError. Verify the error message returned to the frontend is human-readable and includes the maximum allowed quantity so the frontend can display it inline.
 
-[TASK F-1] Replace the Accordion layout in InventoryGrid.js with a static 6x4 CSS grid.
-  The grid must span rows A-F and columns 1-4, producing exactly 24 slot cells.
-  Remove the existing Accordion, groupByRow logic, Expand All / Collapse All buttons,
-  and the react-bootstrap Accordion import.
-  Render all 24 SlotCard components directly in the grid without any row grouping.
+---------------------------------------
+Phase 7 — Frontend Integration
+---------------------------------------
+B-15: Replace hardcoded inventory data with API fetch in React frontend
+File: frontend/src/pages/DashboardPage.js
+Current behavior: The component fetches from /api/inventory but falls back to mockInventory on failure and uses that as the source of truth.
+Required behavior: On component mount, fetch GET /api/inventory. The response is a JSON array of slot objects with the following fields: slot_id, item_name, quantity, price, expiration_date, days_until_expiry, status_color. Store the result in a slots state variable. If the fetch fails, set slots to an empty array and display an error message. Do not import or use mockInventory.
+Acceptance criteria:
+mockInventory is not imported in DashboardPage.js
+On successful fetch, slots contains the API response array
+On failed fetch, slots is empty and an error message is shown
+The machine grid re-renders when slots changes
 
-[TASK F-2] Update SlotCard to match the vending machine slot display.
-  Each slot must show: position label (e.g., "A1"), product name, price, stock count,
-  and expiration countdown ("Exp: Nd" or "Expired" if days_until_expiry < 0).
-  Remove the existing StatusIndicator badge and left-border color styling.
-  Apply background color directly to the slot cell based on status (see Task F-3).
+B-16: Wire purchase confirmation to POST /api/purchase in React frontend
+File: frontend/src/pages/DashboardPage.js and frontend/src/components/PurchaseModal.js (create if it does not exist)
+Current behavior: Clicking a slot opens a Bootstrap modal from RestockModal. There is no dedicated purchase flow in the frontend.
+Required behavior: Clicking an active slot tile opens a PurchaseModal component. The modal displays the item name, slot ID, and price. It has two buttons: Confirm and Cancel.
+When the user clicks Confirm, send the following request:
+POST /api/purchase
+Content-Type: application/json
+Body: { "slot_id": "A1" }
+On success (HTTP 200), close the modal, show a success toast with the item name, and call the inventory refresh function to re-fetch GET /api/inventory and update the grid.
+On HTTP 409 (out of stock), close the modal and show an error toast: "This item is out of stock."
+On HTTP 400 (expired or not found), close the modal and show an error toast: "This item is unavailable."
+On network error, show an error toast: "Network error. Is the backend running?"
+Acceptance criteria:
+Clicking a gray (disabled) slot does nothing
+Clicking an active slot opens the modal with correct item details
+Confirming sends POST /api/purchase with the correct slot_id
+Success re-fetches inventory and updates the grid
+All error states are handled with appropriate toast messages
 
-[TASK F-3] Implement status color and disabled-state logic in SlotCard.
-  Color rules (applied as the slot's background color):
-    - Green  (#5db85d / white text):  stock > 5 AND days_until_expiry > 5
-    - Yellow (#f5c518 / dark text):   stock <= 5 OR days_until_expiry <= 5
-    - Red    (#e53935 / white text):  stock <= 2 OR days_until_expiry <= 2
-    - Gray   (#aaa, disabled):        stock === 0 OR days_until_expiry < 0 (expired)
-  Confirm whether the backend's status_color field already matches these exact thresholds.
-  If thresholds differ, decide whether to use the backend value or recalculate on the frontend.
-  Disabled slots must not respond to clicks and must render at reduced opacity.
+B-17: Wire Manual Restock form to POST /api/restock in React frontend
+File: frontend/src/components/RestockModal.js or the inline sidebar restock form component
+Current behavior: The RestockModal component already sends POST /api/restock with { slot_id, quantity_added, expiration_date }. This task verifies and aligns the existing implementation with the required behavior.
+Required behavior: Verify the following are all true:
+The Slot ID dropdown is populated from the current inventory state, not a hardcoded list. Each option shows slot ID, item name, and current stock level formatted as: A1 — Bic Comfort Pens (Current: 8/10).
+Quantity validation uses 10 - selectedSlot.quantity as the dynamic maximum, not a hardcoded value. The inline error message reads: Quantity cannot exceed {maxQty}.
+The form sends exactly this request body:
+json
+{
+  "slot_id": "A1",
+  "quantity_added": 5,
+  "expiration_date": "2026-12-01"
+}
+On HTTP 200, the form clears, the modal closes, a success toast appears, and GET /api/inventory is re-fetched to update the grid and stat cards.
+On HTTP 400, the API error message is displayed inline above the form buttons.
+On HTTP 409 (ConcurrencyError), display inline: "This slot was recently modified. Please try again."
+Acceptance criteria:
+Slot dropdown shows all 24 slots with live stock levels
+Quantity cap is dynamic per selected slot
+Success triggers inventory refresh
+All error HTTP codes are handled
 
-[TASK F-4] Make non-disabled slots interactive: clicking opens a purchase confirmation modal.
-  The modal must display the item name, slot position (e.g., "A1"), and price.
-  Modal prompt format: "Purchase [item name] (Slot [position]) for $[price]?"
-  Use a React modal overlay (not window.confirm()) with Confirm and Cancel buttons.
-  Purchase interaction is only active when the Dashboard tab is selected.
-  When the Admin tab is active, all slots must be non-clickable (pointer-events: none
-  or equivalent) even if they are not otherwise disabled.
-  [DEPENDS ON B-1]
+B-18: Wire Upload Transaction CSV to POST /api/transactions/process in React frontend
+File: frontend/src/components/TransactionUpload.js
+Current behavior: The component already sends POST /api/transactions/process with a FormData object. This task aligns the response handling and feedback display with the required behavior.
+Required behavior:
+The file input accepts only .csv files.
+When Upload & Process is clicked with no file selected, show an inline error message: "Please select a CSV file."
+When Upload & Process is clicked with a valid file, send:
+POST /api/transactions/process
+Content-Type: multipart/form-data
+Body: FormData with field name "file" containing the .csv file
+On HTTP 200, the response has this shape:
+json
+{
+  "processed_count": 24,
+  "updated_slots": [...],
+  "unresolved_amounts": [1.99, 4.50]
+}
+Display a green inline success message: ✓ {processed_count} transaction(s) processed.
+If unresolved_amounts is non-empty, append to the message: {n} unresolved amount(s): {amounts joined by comma}.
+After a successful upload, call setReportBtnEnabled(true) or equivalent to enable the Generate Sales Report button.
+On HTTP 400 or 500, display a red inline error message with the API's error field value.
+On network error, display: "Network error. Is the backend running?"
+Acceptance criteria:
+File input restricted to .csv
+FormData field name is exactly "file"
+Success message shows processed count and any unresolved amounts
+Generate Sales Report button becomes enabled on success
+All error states show inline messages
 
-[TASK F-5] Implement purchase confirmation logic wired to the backend.
-  On confirm: send POST /api/purchase with { "slot_id": "<id>", "quantity": 1 }.
-  On success: decrement the displayed stock for that slot and re-render the grid.
-  On failure (e.g., out of stock): close the modal and show an error toast.
-  On cancel: close the modal without any changes.
-  This flow must never be reachable from the Admin tab (enforced by Task F-4).
-  [DEPENDS ON B-1]
+B-19: Wire Upload New Inventory CSV to POST /api/inventory/upload in React frontend
+File: frontend/src/components/InventoryUpload.js (create if it does not exist)
+Current behavior: No inventory CSV upload component exists in the React frontend.
+Required behavior: Create a new component InventoryUpload that renders inside the Upload New Inventory CSV accordion panel in the Admin Panel sidebar tab.
+The component contains:
+A hint block showing required and optional columns:
+Required: ROW, Product, Vending Price
+Optional: stock (integer 0–10), expiration_date (YYYY-MM-DD)
+A file browser input accepting .csv only
+An Upload & Process button (primary style)
+A Clear button (secondary style)
+An inline feedback area (initially hidden)
+A horizontal divider
+An Update Inventory button (primary style, disabled by default)
+When Upload & Process is clicked with a valid file, send:
+POST /api/inventory/upload
+Content-Type: multipart/form-data
+Body: FormData with field name "file" containing the .csv file
+On HTTP 200, the response has this shape:
+json
+{
+  "added": 0,
+  "updated": 24,
+  "skipped": 0,
+  "total_rows": 24
+}
+Show a green inline message: ✓ {total_rows} slot(s) ready to update. Enable the Update Inventory button.
+When Update Inventory is clicked, send:
+POST /api/inventory/apply
+Content-Type: application/json
+Body: {}
+On HTTP 200, show a success toast: ✓ Inventory updated. Re-fetch GET /api/inventory to update the grid. Reset the panel to its default state and disable the Update Inventory button.
+When Clear is clicked, reset the file input, clear the feedback message, and disable the Update Inventory button.
+On any error, show a red inline message with the API error text and keep the Update Inventory button disabled.
+Acceptance criteria:
+File input restricted to .csv
+Upload & Process sends file to correct endpoint
+Update Inventory button is disabled until successful upload
+Success triggers inventory refresh via GET /api/inventory
+Clear resets all state
 
-------------------------------------------------------------
-FRONTEND: Phase 2 -- Dashboard & Navigation
-------------------------------------------------------------
-
-[TASK F-6] Add Reload and Help global control buttons to the UI.
-  Reload behavior — choose one before implementing:
-    Option A (re-fetch only): re-call GET /api/inventory and refresh the grid.
-                              No confirmation prompt or backend reset needed.
-    Option B (full reset):    show a confirmation prompt, then call POST /api/reset
-                              to restore default machine state, then re-fetch the grid.
-                              Requires Task B-4.
-  Help button: show a toast or info modal with brief usage instructions
-               (e.g., "Click a slot to purchase. Use Admin Panel to restock.").
-
-------------------------------------------------------------
-FRONTEND: Phase 3 -- Admin Panel Enhancements
-------------------------------------------------------------
-
-[TASK F-7] Refine the Manual Restock Form in RestockModal.js.
-  The file picker, field validation, and cancel/clear behavior are already implemented.
-  Add: a live "X days until expiry" preview that recalculates as the expiration date changes.
-  Add: display a success toast notification after a successful restock submission,
-       replacing or supplementing the current inline feedback message.
-
-[TASK F-8] Update Transaction CSV upload to show a toast on success.
-  The file picker, .csv validation, and POST /api/transactions/process call already exist.
-  Replace the current inline result panel with a toast notification on successful upload.
-  Keep the existing inline error display for failure cases.
-
-[TASK F-9] Implement the "Upload New Inventory" panel in the Admin view.
-  Add a new collapsible panel styled consistently with the existing TransactionUpload section.
-  Include: a file picker that restricts to .csv files and an "Upload & Process" button.
-  On submit: POST the file to POST /api/inventory/upload.
-  On success: show a success toast and refresh the inventory grid.
-  On failure: display an inline error message below the picker.
-  [DEPENDS ON B-2]
-
-[TASK F-10] Build the Sales Report flow in the Admin view.
-  Add a "Generate Sales Report" button.
-  On click: show a confirmation modal asking the user to confirm or cancel.
-  On confirm: call GET /api/sales-report and trigger a file download of the response.
-  On success: show a toast ("Sales report generated.").
-  On failure: show an error toast with the reason.
-  [DEPENDS ON B-3]
-
-------------------------------------------------------------
-BACKEND: Phase 4 -- New Endpoints
-------------------------------------------------------------
-
-[TASK B-1] Implement POST /api/purchase (api/inventory_routes.py).
-  Request body (JSON): { "slot_id": "A1", "quantity": 1 }.
-  Behavior: look up the slot, confirm stock > 0, decrement by quantity, persist, return updated slot.
-  On success (200): return updated slot dict + { "message": "Purchase successful" }.
-  On out-of-stock or concurrent write conflict (409): return a ConcurrencyError-style response
-    consistent with the existing D-2 pattern used in restock and transaction routes.
-  On unknown slot_id (400): return a descriptive error message.
-  This endpoint is a hard dependency for frontend Tasks F-4 and F-5.
-
-[TASK B-2] Implement POST /api/inventory/upload (api/inventory_routes.py).
-  Accepts a CSV file upload (multipart/form-data, field name = "file").
-  Expected CSV columns must match the schema of the existing inventory_config.csv.
-  Behavior: parse the uploaded CSV, clear all existing ItemSlot rows, seed with new rows.
-  On success (200): return { "message": "Inventory uploaded", "slot_count": <int> }.
-  On bad file format or parse error (400): return a descriptive error without touching the database.
-
-[TASK B-3] Implement GET /api/sales-report (api/transaction_routes.py).
-  Aggregate data from the most recently processed transaction stream to produce a sales report.
-  Report columns: slot_id, item_name, total_units_sold, total_revenue.
-  Return the report as a downloadable CSV file with header:
-    Content-Disposition: attachment; filename="sales_report.csv"
-  If no transactions have been processed yet, return 404 with a descriptive message.
-
-[TASK B-4] Implement POST /api/reset (api/inventory_routes.py).  [CONDITIONAL -- see Task F-6]
-  Re-run the seed script to restore the database to its original default state.
-  On success (200): return { "message": "Machine reset to default state" }.
-  Only implement this task if the Reload button in Task F-6 is implemented as Option B
-  (full machine reset). If Option A (re-fetch only) is chosen, this task is not needed.
-
-------------------------
-vending.html prototype 
-------------------------
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>UMBC Vending Inventory System</title>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-<style>
-    :root {
-        --gold: #f0a500;
-        --black: #1a1a1a;
-        --panel-bg: #e8e8e8;
-        --sidebar-bg: #d4d4d4;
-        --border: #999;
-        --green: #4caf50;
-        --yellow: #f5c518;
-        --red: #e53935;
-        --slot-border: #444;
-        --header-bg: #c8c8c8;
-        --blue-panel: #cfe2f3;
+B-20: Wire Generate Sales Report to GET /api/reports/sales in React frontend
+File: frontend/src/components/SalesReport.js (create if it does not exist)
+Current behavior: No sales report exists in the React frontend.
+Required behavior: Create a generateSalesReport function that is called when the Generate Sales Report button is clicked.
+The function sends:
+GET /api/reports/sales
+The response has this shape:
+json
+{
+  "generated_at": "2026-04-23T14:30:00",
+  "source": "transaction_log",
+  "date_range": "3/10/2026 – 3/17/2026",
+  "total_revenue": 87.50,
+  "total_units": 42,
+  "unique_items": 8,
+  "top_item": {
+    "item_name": "Soda",
+    "slot_id": "A1",
+    "units": 12,
+    "revenue": 24.00
+  },
+  "items": [
+    {
+      "rank": 1,
+      "slot_id": "A1",
+      "item_name": "Soda",
+      "units_sold": 12,
+      "total_revenue": 24.00,
+      "avg_price": 2.00
     }
+  ]
+}
+Use the response data to build a sales report HTML string and open it in a new browser window using window.open(). The report window must match the layout from vending.html's openSalesReport() function exactly, including:
+A sticky black top bar with the UMBC logo, "Sales Report" title, a Download CSV button, and a Close button
+A report header block showing generated timestamp, source filename, and date range
+Three summary cards: Total Revenue, Units Sold, Unique Items
+A top-selling item callout block
+A ranked breakdown table with columns: #, Slot ID, Item Name, Units Sold, Total Revenue, Avg Price
+A totals row at the bottom of the table
+A footer with the generation timestamp
+The Download CSV button inside the report window should trigger a browser download of a .csv file containing the report data. The Close button should call window.close().
+On HTTP 400 or 500, show an error toast with the API error message.
+Acceptance criteria:
+Sends GET /api/reports/sales
+Opens report in new window using window.open()
+Report window matches vending.html openSalesReport() layout
+Download CSV saves a .csv file locally
+Close button closes the report window
+Error states show toast messages
 
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+B-21: Wire Dashboard stat cards to live inventory data in React frontend
+File: frontend/src/pages/DashboardPage.js
+Current behavior: The stat cards (Total Slots, Healthy, Low/Expiring, Critical/Out) compute their values by filtering the slots state array using status_color string comparisons.
+Required behavior: After fetching GET /api/inventory (implemented in B-15), compute stat card values directly from the response array using the same threshold logic as vending.html's updateStats() function:
+js
+for each slot in slots:
+  if slot.days_until_expiry <= 0 OR slot.quantity === 0:
+    critical++
+  else if slot.quantity <= 2 OR slot.days_until_expiry <= 2:
+    critical++
+  else if slot.quantity <= 5 OR slot.days_until_expiry <= 5:
+    warning++
+  else:
+    healthy++
+Do not rely on the status_color string field from the API for counting purposes. Compute counts locally from raw quantity and days_until_expiry values so the counts always match what is visually displayed on the slot tiles.
+The four stat card values must update every time GET /api/inventory is re-fetched — after a purchase, after a restock, and after a CSV upload.
+If GET /api/inventory/summary endpoint exists on the backend (B-03), use that instead and remove the local computation.
+Acceptance criteria:
+Stat card counts match the visual slot tile colors exactly
+Counts update after every inventory-modifying action
+Critical count includes both expired/empty slots and red-threshold slots
+status_color string field is not used for counting logic
+Total Slots always equals the length of the slots array
 
-    body {
-        font-family: 'IBM Plex Sans', sans-serif;
-        background: #b0b0b0;
-        min-height: 100vh;
-        display: flex;
-        flex-direction: column;
-    }
 
-    /* ── HEADER ── */
-    header {
-        display: flex;
-        align-items: center;
-        background: var(--panel-bg);
-        border-bottom: 2px solid var(--border);
-        padding: 10px 20px;
-        gap: 20px;
-    }
+************************************************************************
 
-    .logo-area {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        border-right: 2px solid var(--border);
-        padding-right: 20px;
-    }
+Suggested implementation order:
+F-14 → F-01 → F-02 → F-03 → F-04 → F-05 → F-13 → F-06 → 
+F-07 → F-08 → F-09 → F-10 → F-11 → F-12 → F-15
 
-    .umbc-shield {
-        width: 52px;
-        height: 52px;
-    }
+Start with F-14 to establish the CSS foundation, 
+then build the layout shell (F-01 through F-05), 
+then the toast system (F-13), then the machine grid and modals, 
+then the admin panel features, and finally clean up.
 
-    .umbc-text {
-        font-family: 'IBM Plex Mono', monospace;
-        font-size: 2rem;
-        font-weight: 600;
-        letter-spacing: -1px;
-        color: var(--black);
-    }
+--------------------------------------------
+Phase 1 — Layout & Navigation
+--------------------------------------------
+--------------------------------------------
+F-01: Implement two-panel layout in App.js
+--------------------------------------------
+Files to modify: frontend/src/App.js, frontend/src/App.css
+Current behavior: App.js renders a <Sidebar> component on the left and a <main> content area on the right using flexbox. The sidebar navigates between /dashboard and /admin routes.
+Required behavior: Replace the entire App.js layout with a two-panel structure. Remove React Router entirely. The layout should use CSS Grid with grid-template-columns: 280px 1fr. The left panel is the sidebar. The right panel is the machine panel. A full-width header sits above both panels.
+App.js structure:
+jsxfunction App() {
+  const [slots, setSlots] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("dashboard");
 
-    .header-title {
-        font-size: 1.2rem;
-        color: #333;
-        padding-left: 12px;
-    }
+  function fetchInventory() { /* GET /api/inventory */ }
 
-    /* ── MAIN LAYOUT ── */
-    .app-body {
-        display: grid;
-        /* grid-template-columns: 280px 1fr 320px; */
-        grid-template-columns: 280px 1fr;
-        gap: 0;
-        flex: 1;
-        min-height: 0;
-    }
+  useEffect(() => { fetchInventory(); }, []);
 
-    /* ── SIDEBAR ── */
-    .sidebar {
-        background: var(--sidebar-bg);
-        border-right: 2px solid var(--border);
-        padding: 0;
-        display: flex;
-        flex-direction: column;
-    }
+  return (
+    <div className="app-wrapper">
+      <AppHeader />
+      <div className="app-body">
+        <Sidebar
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          slots={slots}
+          onInventoryChange={fetchInventory}
+        />
+        <MachinePanel slots={slots} onPurchaseSuccess={fetchInventory} />
+      </div>
+    </div>
+  );
+}
+CSS to add in App.css:
+css.app-wrapper {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
 
-    .nav-tabs {
-        display: flex;
-        border-bottom: 2px solid var(--border);
-    }
+.app-body {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  flex: 1;
+  min-height: 0;
+}
+Remove from App.js:
 
-    .nav-tab {
-        flex: 1;
-        padding: 8px 10px;
-        font-size: 0.82rem;
-        font-weight: 600;
-        border: none;
-        background: var(--header-bg);
-        cursor: pointer;
-        border-right: 1px solid var(--border);
-        transition: background 0.15s;
-    }
+All imports from react-router-dom
+The <Routes> and <Route> elements
+The import of DashboardPage and AdminPage
 
-    .nav-tab:last-child { border-right: none; }
-    .nav-tab.active { background: var(--panel-bg); }
-    .nav-tab:hover { background: #d8d8d8; }
+Remove from index.js:
 
-    .sidebar-content {
-        padding: 12px;
-        flex: 1;
-        overflow-y: auto;
-    }
+The <BrowserRouter> wrapper
 
-    .panel-box {
-        border: 2px solid var(--border);
-        background: var(--panel-bg);
-        margin-bottom: 10px;
-    }
+Acceptance criteria:
 
-    .panel-box-header {
-        background: var(--header-bg);
-        border-bottom: 1px solid var(--border);
-        padding: 6px 10px;
-        font-size: 0.85rem;
-        font-weight: 600;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        cursor: pointer;
-        user-select: none;
-    }
+No React Router imports anywhere in the project
+App renders header, sidebar, and machine panel in a grid layout
+slots state is owned by App.js and passed down as props
+fetchInventory is passed to child components so they can trigger a refresh
 
-    .panel-box-header .toggle-btn {
-        font-size: 0.75rem;
-        color: #555;
-    }
-
-    .panel-box-body {
-        padding: 10px;
-        background: var(--blue-panel);
-        display: none;
-    }
-
-    .panel-box-body.open { display: block; }
-
-    .form-row {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        margin-bottom: 8px;
-        font-size: 0.8rem;
-    }
-
-    .form-row label {
-        min-width: 80px;
-        font-weight: 600;
-        font-size: 0.78rem;
-        color: #333;
-    }
-
-    .form-row select,
-    .form-row input {
-        flex: 1;
-        padding: 4px 6px;
-        border: 1px solid var(--border);
-        font-size: 0.78rem;
-        font-family: 'IBM Plex Sans', sans-serif;
-        background: white;
-    }
-
-    .btn-row {
-        display: flex;
-        gap: 6px;
-        margin-top: 4px;
-    }
-
-    .btn {
-        padding: 5px 14px;
-        border: 1.5px solid var(--border);
-        background: var(--panel-bg);
-        font-family: 'IBM Plex Sans', sans-serif;
-        font-size: 0.78rem;
-        font-weight: 600;
-        cursor: pointer;
-        transition: background 0.15s;
-    }
-
-    .btn:hover { background: #ccc; }
-    .btn.primary { background: var(--black); color: white; border-color: var(--black); }
-    .btn.primary:hover { background: #333; }
-
-    .sidebar-action-btn {
-        width: 100%;
-        text-align: left;
-        padding: 7px 10px;
-        border: 2px solid var(--border);
-        background: var(--panel-bg);
-        font-family: 'IBM Plex Sans', sans-serif;
-        font-size: 0.83rem;
-        font-weight: 600;
-        cursor: pointer;
-        margin-bottom: 8px;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        transition: background 0.15s;
-    }
-
-    .sidebar-action-btn:hover { background: #d0d0d0; }
-
-    .sidebar-footer {
-        padding: 10px 12px;
-        border-top: 2px solid var(--border);
-        display: flex;
-        gap: 8px;
-    }
-
-    /* ── MIDDLE PANEL ── */
-    .middle-panel {
-        background: var(--panel-bg);
-        border-right: 2px solid var(--border);
-        display: flex;
-        flex-direction: column;
-    }
-
-    .panel-nav-tabs {
-        display: flex;
-        border-bottom: 2px solid var(--border);
-        background: var(--header-bg);
-    }
-
-    .panel-nav-tab {
-        padding: 8px 18px;
-        font-size: 0.82rem;
-        font-weight: 600;
-        border: none;
-        background: transparent;
-        cursor: pointer;
-        border-right: 1px solid var(--border);
-        transition: background 0.15s;
-    }
-
-    .panel-nav-tab.active { background: var(--panel-bg); }
-    .panel-nav-tab:hover { background: #d4d4d4; }
-
-    .dashboard-content {
-        padding: 16px;
-        flex: 1;
-    }
-
-    .dashboard-title {
-        font-size: 1rem;
-        font-weight: 600;
-        margin-bottom: 14px;
-        border-bottom: 2px solid var(--border);
-        padding-bottom: 8px;
-    }
-
-    .stat-card {
-        border: 2px solid var(--border);
-        background: white;
-        padding: 10px 14px;
-        margin-bottom: 10px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        font-size: 0.9rem;
-        font-weight: 500;
-    }
-
-    .stat-card .stat-value {
-        font-family: 'IBM Plex Mono', monospace;
-        font-size: 1.1rem;
-        font-weight: 600;
-    }
-
-    .stat-card.healthy .stat-value { color: var(--green); }
-    .stat-card.warning .stat-value { color: #c8880a; }
-    .stat-card.critical .stat-value { color: var(--red); }
-
-    .dashboard-actions {
-        display: flex;
-        gap: 8px;
-        margin-top: 16px;
-    }
-
-    /* ── RIGHT PANEL: MACHINE ── */
-    .machine-panel {
-        background: var(--panel-bg);
-        display: flex;
-        flex-direction: column;
-    }
-
-    .machine-panel-header {
-        background: var(--header-bg);
-        border-bottom: 2px solid var(--border);
-        padding: 8px 14px;
-        font-size: 1rem;
-        font-weight: 600;
-        text-align: center;
-    }
-
-    .machine-grid {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 8px;
-        padding: 14px;
-        flex: 1;
-    }
-
-    .slot {
-        border: 2px solid var(--slot-border);
-        padding: 8px 6px;
-        cursor: pointer;
-        text-align: center;
-        transition: filter 0.15s, transform 0.1s;
-        font-size: 0.72rem;
-        position: relative;
-    }
-
-    .slot:hover:not(.disabled) {
-        filter: brightness(0.9);
-        transform: scale(1.03);
-    }
-
-    .slot.disabled {
-        background: #aaa !important;
-        cursor: not-allowed;
-        opacity: 0.7;
-    }
-
-    .slot.green  { background: #5db85d; color: #fff; }
-    .slot.yellow { background: var(--yellow); color: #333; }
-    .slot.red    { background: var(--red); color: #fff; }
-
-    .slot-id {
-        font-family: 'IBM Plex Mono', monospace;
-        font-weight: 600;
-        font-size: 0.85rem;
-        margin-bottom: 2px;
-    }
-
-    .slot-name { font-size: 0.68rem; margin-bottom: 2px; }
-    .slot-price { font-weight: 600; font-size: 0.75rem; }
-    .slot-stock { font-size: 0.65rem; opacity: 0.9; }
-    .slot-exp { font-size: 0.6rem; opacity: 0.8; margin-top: 2px; }
-
-    /* ── POPUP ── */
-    .popup {
-        display: none;
-        position: fixed;
-        inset: 0;
-        background: rgba(0,0,0,0.55);
-        justify-content: center;
-        align-items: center;
-        z-index: 100;
-    }
-
-    .popup-content {
-        background: var(--panel-bg);
-        border: 2px solid var(--border);
-        padding: 24px;
-        width: 320px;
-    }
-
-    .popup-content h3 {
-        font-size: 0.95rem;
-        margin-bottom: 12px;
-        border-bottom: 1px solid var(--border);
-        padding-bottom: 8px;
-    }
-
-    .popup-content p {
-        font-size: 0.88rem;
-        margin-bottom: 16px;
-        color: #333;
-    }
-
-    /* ── TOAST ── */
-    .toast {
-        position: fixed;
-        bottom: 24px;
-        right: 24px;
-        background: var(--black);
-        color: white;
-        padding: 10px 18px;
-        font-size: 0.83rem;
-        font-family: 'IBM Plex Mono', monospace;
-        border-left: 4px solid var(--gold);
-        opacity: 0;
-        transform: translateY(10px);
-        transition: opacity 0.2s, transform 0.2s;
-        z-index: 200;
-    }
-
-    .toast.show { opacity: 1; transform: translateY(0); }
-</style>
-</head>
-<body>
-
-<!-- HEADER -->
-<header>
-    <div class="logo-area">
-        <!-- UMBC Shield SVG approximation -->
-        <svg class="umbc-shield" viewBox="0 0 52 52" xmlns="http://www.w3.org/2000/svg">
-            <path d="M26 2 L50 10 L50 32 C50 44 38 50 26 52 C14 50 2 44 2 32 L2 10 Z" fill="#f0a500" stroke="#111" stroke-width="1.5"/>
-            <path d="M26 6 L46 13 L46 31 C46 41 36 47 26 49 C16 47 6 41 6 31 L6 13 Z" fill="white"/>
-            <rect x="6" y="6" width="20" height="22" fill="#c8102e" rx="0"/>
-            <rect x="26" y="28" width="20" height="20" fill="#c8102e" rx="0"/>
-            <text x="14" y="21" font-size="13" font-weight="bold" fill="white" text-anchor="middle" font-family="serif">M</text>
-            <text x="36" y="42" font-size="11" font-weight="bold" fill="white" text-anchor="middle" font-family="serif">BC</text>
+--------------------------------------------
+F-02: Create AppHeader component
+--------------------------------------------
+File to create: frontend/src/components/AppHeader.js
+Required behavior: Create a stateless component that renders the persistent full-width header. It contains the UMBC shield SVG logo, the text "UMBC" in IBM Plex Mono, and the system title "Vending Inventory System".
+Component:
+jsxfunction AppHeader() {
+  return (
+    <header className="app-header">
+      <div className="logo-area">
+        <svg className="umbc-shield" viewBox="0 0 52 52" xmlns="http://www.w3.org/2000/svg">
+          <path d="M26 2 L50 10 L50 32 C50 44 38 50 26 52 C14 50 2 44 2 32 L2 10 Z" fill="#f0a500" stroke="#111" strokeWidth="1.5"/>
+          <path d="M26 6 L46 13 L46 31 C46 41 36 47 26 49 C16 47 6 41 6 31 L6 13 Z" fill="white"/>
+          <rect x="6" y="6" width="20" height="22" fill="#c8102e"/>
+          <rect x="26" y="28" width="20" height="20" fill="#c8102e"/>
+          <text x="14" y="21" fontSize="13" fontWeight="bold" fill="white" textAnchor="middle" fontFamily="serif">M</text>
+          <text x="36" y="42" fontSize="11" fontWeight="bold" fill="white" textAnchor="middle" fontFamily="serif">BC</text>
         </svg>
-        <span class="umbc-text">UMBC</span>
-    </div>
-    <span class="header-title">Vending Inventory System</span>
-</header>
+        <span className="umbc-text">UMBC</span>
+      </div>
+      <span className="header-title">Vending Inventory System</span>
+    </header>
+  );
+}
+CSS to add in App.css:
+css.app-header {
+  display: flex;
+  align-items: center;
+  background: var(--panel-bg);
+  border-bottom: 2px solid var(--border);
+  padding: 10px 20px;
+  gap: 20px;
+}
 
-<!-- MAIN BODY -->
-<div class="app-body">
+.logo-area {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-right: 2px solid var(--border);
+  padding-right: 20px;
+}
 
-    <!-- ── LEFT SIDEBAR ── -->
-    <aside class="sidebar">
-        <div class="nav-tabs">
-            <button class="nav-tab active" onclick="switchSidebarTab('dashboard', this)">Dashboard</button>
-            <button class="nav-tab" onclick="switchSidebarTab('admin', this)">Admin Panel</button>
-        </div>
+.umbc-shield { width: 52px; height: 52px; }
 
-        <!-- Dashboard Tab -->
-        <div class="sidebar-content" id="sidebar-dashboard">
-            <p style="font-size:0.8rem;color:#555;padding:4px 0 10px;">Overview and quick stats.</p>
-            <div class="stat-card">
-                <span>Total Slots</span>
-                <span class="stat-value" id="sb-total">24</span>
-            </div>
-            <div class="stat-card healthy">
-                <span>Healthy</span>
-                <span class="stat-value" id="sb-healthy">—</span>
-            </div>
-            <div class="stat-card warning">
-                <span>Low / Expiring</span>
-                <span class="stat-value" id="sb-warning">—</span>
-            </div>
-            <div class="stat-card critical">
-                <span>Critical / Out</span>
-                <span class="stat-value" id="sb-critical">—</span>
-            </div>
-        </div>
+.umbc-text {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: -1px;
+  color: var(--black);
+}
 
-        <!-- Admin Tab -->
-        <div class="sidebar-content" id="sidebar-admin" style="display:none;">
+.header-title {
+  font-size: 1.2rem;
+  color: #333;
+  padding-left: 12px;
+}
+Acceptance criteria:
 
-            <!-- Manual Restock -->
-            <div class="panel-box">
-                <div class="panel-box-header" onclick="togglePanel('restock-body', this)">
-                    + Manual Restock
-                    <span class="toggle-btn">▸</span>
-                </div>
-                <div class="panel-box-body" id="restock-body">
-                    <div class="form-row">
-                        <label>Slot ID</label>
-                        <select id="restock-slot">
-                            <option value="">– Select Slot –</option>
-                        </select>
-                    </div>
-                    <div class="form-row">
-                        <label>Qty Added</label>
-                        <input type="number" id="restock-qty" placeholder="e.g. 5" min="1" max="20">
-                    </div>
-                    <div class="form-row">
-                        <label>Exp Date</label>
-                        <input type="date" id="restock-date">
-                    </div>
-                    <div class="btn-row">
-                        <button class="btn primary" onclick="doRestock()">Restock</button>
-                        <button class="btn" onclick="clearRestock()">Cancel</button>
-                    </div>
-                </div>
-            </div>
+Header is full width and persistent
+UMBC shield SVG renders correctly
+IBM Plex Mono font is applied to the UMBC text
 
-            <!-- Upload Transaction CSV -->
-            <div class="panel-box">
-                <div class="panel-box-header" onclick="togglePanel('txn-body', this)">
-                    Upload Transaction CSV
-                    <span class="toggle-btn">▸</span>
-                </div>
-                <div class="panel-box-body" id="txn-body">
-                    <div class="form-row">
-                        <input type="file" accept=".csv" id="txn-file" style="font-size:0.75rem;">
-                    </div>
-                    <div class="btn-row">
-                        <button class="btn primary" onclick="showToast('Transaction CSV processed.')">Upload &amp; Process</button>
-                    </div>
-                </div>
-            </div>
+--------------------------------------------
+F-03: Create Sidebar component with tab switching
+--------------------------------------------
+File to create: frontend/src/components/Sidebar.js
+Props:
+activeTab: string ("dashboard" | "admin")
+setActiveTab: function
+slots: array
+onInventoryChange: function
+Required behavior: The sidebar has two tabs at the top — Dashboard and Admin Panel. Clicking a tab calls setActiveTab with the tab name. The active tab has a lighter background. Below the tabs, the sidebar renders either <DashboardTab> or <AdminTab> based on activeTab. A footer with Reload and Help buttons is always visible at the bottom.
+Component structure:
+jsxfunction Sidebar({ activeTab, setActiveTab, slots, onInventoryChange }) {
+  return (
+    <aside className="sidebar">
+      <div className="nav-tabs">
+        <button
+          className={`nav-tab ${activeTab === "dashboard" ? "active" : ""}`}
+          onClick={() => setActiveTab("dashboard")}
+        >Dashboard</button>
+        <button
+          className={`nav-tab ${activeTab === "admin" ? "active" : ""}`}
+          onClick={() => setActiveTab("admin")}
+        >Admin Panel</button>
+      </div>
 
-            <!-- Upload Inventory CSV -->
-            <div class="panel-box">
-                <div class="panel-box-header" onclick="togglePanel('inv-body', this)">
-                    Upload New Inventory CSV
-                    <span class="toggle-btn">▸</span>
-                </div>
-                <div class="panel-box-body" id="inv-body">
-                    <div class="form-row">
-                        <input type="file" accept=".csv" id="inv-file" style="font-size:0.75rem;">
-                    </div>
-                    <div class="btn-row">
-                        <button class="btn primary" onclick="showToast('Inventory CSV uploaded.')">Upload &amp; Process</button>
-                    </div>
-                </div>
-            </div>
+      <div className="sidebar-content">
+        {activeTab === "dashboard" && <DashboardTab slots={slots} />}
+        {activeTab === "admin" && <AdminTab slots={slots} onInventoryChange={onInventoryChange} />}
+      </div>
 
-            <!-- Generate Sales Report -->
-            <button class="sidebar-action-btn" onclick="showToast('Sales report generated.')">
-                📊 Generate Sales Report
-            </button>
-
-        </div>
-
-        <div class="sidebar-footer">
-            <button class="btn" onclick="renderMachine(); updateStats();">Reload</button>
-            <button class="btn" onclick="showToast('Help: hover slots to see details, click to purchase.')">Help</button>
-        </div>
+      <div className="sidebar-footer">
+        <button className="btn" onClick={onInventoryChange}>Reload</button>
+        <button className="btn" onClick={() => showToast("Help: Green = healthy, Yellow = low/expiring, Red = critical/expired.")}>Help</button>
+      </div>
     </aside>
+  );
+}
+CSS to add in App.css:
+css.sidebar {
+  background: var(--sidebar-bg);
+  border-right: 2px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
 
-    <!-- ── RIGHT: MACHINE ── -->
-    <section class="machine-panel">
-        <div class="machine-panel-header">UMBC Vending Machine</div>
-        <div class="machine-grid" id="machine"></div>
-    </section>
+.nav-tabs { display: flex; border-bottom: 2px solid var(--border); }
 
-</div>
+.nav-tab {
+  flex: 1;
+  padding: 8px 10px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border: none;
+  background: var(--header-bg);
+  cursor: pointer;
+  border-right: 1px solid var(--border);
+  transition: background 0.15s;
+}
 
-<!-- PURCHASE POPUP -->
-<div class="popup" id="popup">
-    <div class="popup-content">
-        <h3>Confirm Purchase</h3>
-        <p id="popup-text"></p>
-        <div class="btn-row">
-            <button class="btn primary" onclick="confirmPurchase()">Confirm</button>
-            <button class="btn" onclick="closePopup()">Cancel</button>
-        </div>
+.nav-tab:last-child { border-right: none; }
+.nav-tab.active { background: var(--panel-bg); }
+.nav-tab:hover { background: #d8d8d8; }
+
+.sidebar-content { padding: 12px; flex: 1; overflow-y: auto; }
+
+.sidebar-footer {
+  padding: 10px 12px;
+  border-top: 2px solid var(--border);
+  display: flex;
+  gap: 8px;
+}
+Acceptance criteria:
+
+Clicking Dashboard tab shows DashboardTab content
+Clicking Admin Panel tab shows AdminTab content
+Active tab is visually distinguished
+Footer Reload button calls onInventoryChange
+Sidebar content scrolls independently if content overflows
+
+--------------------------------------------
+F-04: Create DashboardTab component
+--------------------------------------------
+File to create: frontend/src/components/DashboardTab.js
+Props:
+slots: array
+Required behavior: Render four stat cards — Total Slots, Healthy, Low/Expiring, and Critical/Out — computed from the slots prop using the following logic:
+jslet healthy = 0, warning = 0, critical = 0;
+for (const slot of slots) {
+  const c = slot.quantity;
+  const d = slot.days_until_expiry;
+  if (d <= 0 || c === 0) critical++;
+  else if (c <= 2 || d <= 2) critical++;
+  else if (c <= 5 || d <= 5) warning++;
+  else healthy++;
+}
+Component structure:
+jsxfunction DashboardTab({ slots }) {
+  // compute healthy, warning, critical from slots
+  return (
+    <div>
+      <p className="sidebar-desc">Overview and quick stats.</p>
+      <StatCard label="Total Slots" value={slots.length} />
+      <StatCard label="Healthy" value={healthy} colorClass="healthy" />
+      <StatCard label="Low / Expiring" value={warning} colorClass="warning" />
+      <StatCard label="Critical / Out" value={critical} colorClass="critical" />
     </div>
+  );
+}
+
+function StatCard({ label, value, colorClass }) {
+  return (
+    <div className="stat-card">
+      <span>{label}</span>
+      <span className={`stat-value ${colorClass || ""}`}>{value}</span>
+    </div>
+  );
+}
+CSS to add in App.css:
+css.stat-card {
+  border: 2px solid var(--border);
+  background: white;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.stat-value {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.stat-value.healthy { color: var(--green); }
+.stat-value.warning { color: #c8880a; }
+.stat-value.critical { color: var(--red); }
+Acceptance criteria:
+
+Stat counts match the visual slot tile colors exactly
+Counts update when slots prop changes
+Critical includes both expired/empty and red-threshold slots
+Does not use status_color string for counting
+
+--------------------------------------------
+F-05: Create AdminTab component with accordion panels
+--------------------------------------------
+File to create: frontend/src/components/AdminTab.js
+Props:
+slots: array
+onInventoryChange: function
+Required behavior: Render three collapsible accordion panels and one standalone button. Each panel has a header that toggles the body open or closed. The toggle arrow shows ▸ when collapsed and ▾ when expanded. Panels are collapsed by default.
+Component structure:
+jsxfunction AdminTab({ slots, onInventoryChange }) {
+  const [openPanel, setOpenPanel] = useState(null);
+
+  function togglePanel(name) {
+    setOpenPanel(prev => prev === name ? null : name);
+  }
+
+  return (
+    <div>
+      <AccordionPanel
+        title="+ Manual Restock"
+        isOpen={openPanel === "restock"}
+        onToggle={() => togglePanel("restock")}
+      >
+        <RestockForm slots={slots} onSuccess={onInventoryChange} />
+      </AccordionPanel>
+
+      <AccordionPanel
+        title="Upload Transaction CSV"
+        isOpen={openPanel === "txn"}
+        onToggle={() => togglePanel("txn")}
+      >
+        <TransactionUpload onSuccess={onInventoryChange} />
+      </AccordionPanel>
+
+      <AccordionPanel
+        title="Upload New Inventory CSV"
+        isOpen={openPanel === "inv"}
+        onToggle={() => togglePanel("inv")}
+      >
+        <InventoryUpload onSuccess={onInventoryChange} />
+      </AccordionPanel>
+
+      <hr className="panel-divider" />
+      <GenerateSalesReportButton />
+    </div>
+  );
+}
+
+function AccordionPanel({ title, isOpen, onToggle, children }) {
+  return (
+    <div className="panel-box">
+      <div className="panel-box-header" onClick={onToggle}>
+        {title}
+        <span className="toggle-btn">{isOpen ? "▾" : "▸"}</span>
+      </div>
+      {isOpen && <div className="panel-box-body">{children}</div>}
+    </div>
+  );
+}
+CSS to add in App.css:
+css.panel-box {
+  border: 2px solid var(--border);
+  background: var(--panel-bg);
+  margin-bottom: 10px;
+}
+
+.panel-box-header {
+  background: var(--header-bg);
+  border-bottom: 1px solid var(--border);
+  padding: 6px 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+}
+
+.panel-box-body {
+  padding: 10px;
+  background: var(--blue-panel);
+}
+
+.panel-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 10px 0;
+}
+Acceptance criteria:
+
+Only one panel can be open at a time
+Toggle arrow updates correctly
+Each panel renders its child component when open
+Generate Sales Report button is visible below all panels
+
+--------------------------------------------
+Phase 2 — Vending Machine Grid
+--------------------------------------------
+--------------------------------------------
+F-06: Create MachinePanel component
+--------------------------------------------
+File to create: frontend/src/components/MachinePanel.js
+Props:
+slots: array
+onPurchaseSuccess: function
+Required behavior: Render a panel with a centered header bar reading "UMBC Vending Machine" and a 4-column CSS Grid below it containing one SlotTile per slot. Pass onPurchaseSuccess down to each SlotTile.
+Component structure:
+jsxfunction MachinePanel({ slots, onPurchaseSuccess }) {
+  return (
+    <section className="machine-panel">
+      <div className="machine-panel-header">UMBC Vending Machine</div>
+      <div className="machine-grid">
+        {slots.map(slot => (
+          <SlotTile
+            key={slot.slot_id}
+            slot={slot}
+            onPurchaseSuccess={onPurchaseSuccess}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+CSS to add in App.css:
+css.machine-panel {
+  background: var(--panel-bg);
+  display: flex;
+  flex-direction: column;
+}
+
+.machine-panel-header {
+  background: var(--header-bg);
+  border-bottom: 2px solid var(--border);
+  padding: 8px 14px;
+  font-size: 1rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.machine-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  padding: 14px;
+  flex: 1;
+}
+Acceptance criteria:
+
+Grid renders exactly 24 slot tiles
+Layout is 4 columns at all times
+Header is centered and persistent
+
+--------------------------------------------
+F-07: Create SlotTile component
+--------------------------------------------
+File to create: frontend/src/components/SlotTile.js
+Props:
+slot: object { slot_id, item_name, quantity, price, days_until_expiry }
+onPurchaseSuccess: function
+Required behavior: Render a single slot tile. Compute the color class from quantity and days_until_expiry using this exact logic:
+jsfunction getColorClass(quantity, days) {
+  if (days <= 0 || quantity === 0) return "disabled";
+  if (quantity <= 2 || days <= 2) return "red";
+  if (quantity <= 5 || days <= 5) return "yellow";
+  return "green";
+}
+Apply the color class to the tile's root element. Gray (disabled) tiles must not be clickable. Active tiles open a PurchaseModal on click.
+Component:
+jsxfunction SlotTile({ slot, onPurchaseSuccess }) {
+  const [showModal, setShowModal] = useState(false);
+  const colorClass = getColorClass(slot.quantity, slot.days_until_expiry);
+  const isDisabled = colorClass === "disabled";
+  const isExpired = slot.days_until_expiry <= 0;
+
+  return (
+    <>
+      <div
+        className={`slot-tile ${colorClass}`}
+        onClick={isDisabled ? undefined : () => setShowModal(true)}
+      >
+        <div className="slot-id">{slot.slot_id}</div>
+        <div className="slot-name">{slot.item_name}</div>
+        <div className="slot-price">${slot.price.toFixed(2)}</div>
+        <div className="slot-stock">Stock: {slot.quantity}</div>
+        <div className="slot-exp">
+          {isExpired ? "⚠ Expired" : `Exp: ${slot.days_until_expiry}d`}
+        </div>
+      </div>
+      {showModal && (
+        <PurchaseModal
+          slot={slot}
+          onClose={() => setShowModal(false)}
+          onSuccess={() => {
+            setShowModal(false);
+            onPurchaseSuccess();
+          }}
+        />
+      )}
+    </>
+  );
+}
+CSS to add in App.css:
+css.slot-tile {
+  border: 2px solid var(--slot-border);
+  padding: 8px 6px;
+  text-align: center;
+  font-size: 0.72rem;
+  transition: filter 0.15s, transform 0.1s;
+  cursor: pointer;
+}
+
+.slot-tile:hover:not(.disabled) {
+  filter: brightness(0.9);
+  transform: scale(1.03);
+}
+
+.slot-tile.disabled { background: #aaa; cursor: not-allowed; opacity: 0.7; }
+.slot-tile.green { background: #5db85d; color: #fff; }
+.slot-tile.yellow { background: var(--yellow); color: #333; }
+.slot-tile.red { background: var(--red); color: #fff; }
+
+.slot-id {
+  font-family: 'IBM Plex Mono', monospace;
+  font-weight: 600;
+  font-size: 0.85rem;
+  margin-bottom: 2px;
+}
+
+.slot-name { font-size: 0.68rem; margin-bottom: 2px; }
+.slot-price { font-weight: 600; font-size: 0.75rem; }
+.slot-stock { font-size: 0.65rem; opacity: 0.9; }
+.slot-exp { font-size: 0.6rem; opacity: 0.8; margin-top: 2px; }
+Acceptance criteria:
+
+Color class is computed from quantity and days_until_expiry, not status_color
+Disabled tiles do not respond to clicks
+Active tiles open PurchaseModal on click
+Expired slots show "⚠ Expired" instead of days
+
+--------------------------------------------
+Phase 3 — Purchase Confirmation Modal
+--------------------------------------------
+--------------------------------------------
+F-08: Create PurchaseModal component
+--------------------------------------------
+File to create: frontend/src/components/PurchaseModal.js
+Props:
+slot: object { slot_id, item_name, price }
+onClose: function
+onSuccess: function
+Required behavior: Render a centered modal overlay. Display the item name, slot ID, and price. Two buttons: Confirm (primary) and Cancel (secondary). Clicking Cancel calls onClose. Clicking Confirm sends POST /api/purchase and handles the response.
+API call:
+POST /api/purchase
+Content-Type: application/json
+Body: { "slot_id": "A1" }
+Response handling:
+
+HTTP 200 → call onSuccess(), show toast: ✓ {item_name} dispensed!
+HTTP 409 → call onClose(), show toast: This item is out of stock.
+HTTP 400 → call onClose(), show toast: This item is unavailable.
+Network error → call onClose(), show toast: Network error. Is the backend running?
+
+Component:
+jsxfunction PurchaseModal({ slot, onClose, onSuccess }) {
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleConfirm() {
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/purchase", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slot_id: slot.slot_id }),
+      });
+      if (res.ok) {
+        showToast(`✓ ${slot.item_name} dispensed!`);
+        onSuccess();
+      } else if (res.status === 409) {
+        showToast("This item is out of stock.");
+        onClose();
+      } else {
+        showToast("This item is unavailable.");
+        onClose();
+      }
+    } catch {
+      showToast("Network error. Is the backend running?");
+      onClose();
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-content">
+        <h3>Confirm Purchase</h3>
+        <p>Purchase {slot.item_name} (Slot {slot.slot_id}) for ${slot.price.toFixed(2)}?</p>
+        <div className="btn-row">
+          <button className="btn primary" onClick={handleConfirm} disabled={submitting}>
+            {submitting ? "Processing…" : "Confirm"}
+          </button>
+          <button className="btn" onClick={onClose} disabled={submitting}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+CSS to add in App.css:
+css.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 100;
+}
+
+.modal-content {
+  background: var(--panel-bg);
+  border: 2px solid var(--border);
+  padding: 24px;
+  width: 320px;
+}
+
+.modal-content h3 {
+  font-size: 0.95rem;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+.modal-content p {
+  font-size: 0.88rem;
+  margin-bottom: 16px;
+  color: #333;
+}
+Acceptance criteria:
+
+Modal renders as a fixed overlay
+Confirm button is disabled while request is in flight
+All four response states are handled
+Cancel always closes without API call
+
+--------------------------------------------
+Phase 4 — Manual Restock Form
+--------------------------------------------
+--------------------------------------------
+F-09: Create RestockForm component
+--------------------------------------------
+File to create: frontend/src/components/RestockForm.js
+Props:
+slots: array
+onSuccess: function
+Required behavior: Render an inline restock form inside the accordion panel. The form has three fields: Slot ID (dropdown), Qty Added (number input), and Exp Date (date input). Validate all three fields simultaneously on submit. Display inline error messages beneath each offending field. On success, clear the form, call onSuccess(), and show a success toast.
+Validation rules:
+
+Slot ID: required
+Qty Added: required, integer, minimum 1, maximum 10 - selectedSlot.quantity
+Exp Date: required
+
+Slot ID dropdown options format: A1 — Bic Comfort Pens (Current: 8/10)
+API call on submit:
+POST /api/restock
+Content-Type: application/json
+Body: { "slot_id": "A1", "quantity_added": 5, "expiration_date": "2026-12-01" }
+Response handling:
+
+HTTP 200 → clear form, call onSuccess(), show toast: ✓ {item_name} restocked (+{qty})
+HTTP 400 → show API error message inline above buttons
+HTTP 409 → show inline: This slot was recently modified. Please try again.
+Network error → show inline: Network error. Is the backend running?
+
+Inline error element pattern:
+jsx<div className="field-error" style={{ display: error ? "block" : "none" }}>
+  {error}
 </div>
-
-<!-- TOAST -->
-<div class="toast" id="toast"></div>
-
-<script>
-const items = [
-    ["Chips",1.50],["Soda",2.00],["Candy Bar",1.25],["Water",1.00],
-    ["Cookies",1.75],["Juice",2.25],["Gum",0.75],["Crackers",1.50],
-    ["Granola Bar",1.25],["Iced Tea",2.00],["Trail Mix",1.75],["Energy Drink",3.00],
-    ["Pretzels",1.50],["Sparkling Water",2.25],["Chocolate",1.50],["Nuts",2.00],
-    ["Popcorn",1.75],["Lemonade",2.00],["Protein Bar",2.50],["Coffee Can",2.75],
-    ["Candy",1.00],["Milk",2.25],["Smoothie",3.50],["Water Bottle",1.50]
-];
-
-const rows = ["A","B","C","D","E","F"];
-
-let inventory = Array.from({length:24}, () => Math.floor(Math.random()*11));
-let daysUntilExpiration = Array.from({length:24}, () => Math.floor(Math.random()*13)-2);
-let selectedIndex = null;
-
-// ── Slot ID helpers ──
-function slotLabel(i) {
-    return rows[Math.floor(i/4)] + i%4;
+CSS to add in App.css:
+css.form-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 0.8rem;
 }
 
-// ── Color ──
-function getColorClass(count, days) {
-    if (days < 0 || count === 0) return "disabled";
-    if (count <= 2 || days <= 2) return "red";
-    if (count <= 5 || days <= 5) return "yellow";
-    return "green";
+.form-row label {
+  min-width: 80px;
+  font-weight: 600;
+  font-size: 0.78rem;
+  color: #333;
 }
 
-// ── Render machine ──
-function renderMachine() {
-    const machine = document.getElementById("machine");
-    machine.innerHTML = "";
-    for (let i=0; i<24; i++) {
-        const [name, price] = items[i];
-        const count = inventory[i];
-        const days = daysUntilExpiration[i];
-        const expired = days < 0;
-        const colorClass = getColorClass(count, days);
+.form-row select,
+.form-row input {
+  flex: 1;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  font-size: 0.78rem;
+  background: white;
+}
 
-        const slot = document.createElement("div");
-        slot.className = `slot ${colorClass}`;
+.field-error {
+  color: var(--red);
+  font-size: 0.72rem;
+  margin-top: -4px;
+  margin-bottom: 6px;
+}
 
-        slot.innerHTML = `
-            <div class="slot-id">${slotLabel(i)}</div>
-            <div class="slot-name">${name}</div>
-            <div class="slot-price">$${price.toFixed(2)}</div>
-            <div class="slot-stock">Stock: ${count}</div>
-            <div class="slot-exp">${expired ? "⚠ Expired" : `Exp: ${days}d`}</div>
-        `;
+.btn-row { display: flex; gap: 6px; margin-top: 4px; }
 
-        if (count > 0 && !expired) {
-            slot.onclick = () => openPopup(i, slotLabel(i), name, price);
-        }
+.btn {
+  padding: 5px 14px;
+  border: 1.5px solid var(--border);
+  background: var(--panel-bg);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
 
-        machine.appendChild(slot);
+.btn:hover { background: #ccc; }
+
+.btn.primary {
+  background: var(--black);
+  color: white;
+  border-color: var(--black);
+}
+
+.btn.primary:hover { background: #333; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+Acceptance criteria:
+
+All three fields validated simultaneously on submit
+Quantity max is dynamic based on selected slot
+Dropdown shows all slots with current stock levels
+Inline errors appear beneath each offending field
+Success clears form, calls onSuccess, shows toast
+All HTTP error codes handled
+
+--------------------------------------------
+Phase 5 — Upload Transaction CSV
+--------------------------------------------
+--------------------------------------------
+F-10: Create TransactionUpload component
+--------------------------------------------
+File to create: frontend/src/components/TransactionUpload.js
+Props:
+onSuccess: function
+Required behavior: Render a file upload panel inside the accordion body. The panel contains a file browser (.csv only), an Upload & Process button, a Clear button, an inline feedback area, a horizontal divider, and a Generate Sales Report button that is disabled until a CSV is successfully processed.
+State:
+jsconst [file, setFile] = useState(null);
+const [feedback, setFeedback] = useState({ message: "", type: "" });
+const [reportEnabled, setReportEnabled] = useState(false);
+const [uploading, setUploading] = useState(false);
+Upload & Process API call:
+POST /api/transactions/process
+Content-Type: multipart/form-data
+Body: FormData with field "file" containing the .csv file
+Response handling:
+
+HTTP 200: set feedback to green: ✓ {processed_count} transaction(s) processed. Append if unresolved:  {n} unresolved: {amounts}. Call setReportEnabled(true).
+HTTP 400/500: set feedback to red with API error message. Keep report button disabled.
+Network error: set feedback to red: Network error. Is the backend running?
+
+Clear behavior: Reset file input, clear feedback, set reportEnabled to false.
+Generate Sales Report: Calls generateSalesReport() function (implemented in F-15).
+CSS to add in App.css:
+css.csv-feedback {
+  font-size: 0.75rem;
+  margin: 6px 0;
+  padding: 5px 8px;
+  border-left: 3px solid var(--border);
+  background: white;
+}
+
+.csv-feedback.success { border-color: var(--green); color: #2a6e2a; }
+.csv-feedback.error { border-color: var(--red); color: #a01a1a; }
+
+.full-width-btn {
+  width: 100%;
+  text-align: left;
+  padding: 7px 10px;
+  border: 2px solid var(--border);
+  background: var(--panel-bg);
+  font-size: 0.83rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.15s;
+  margin-bottom: 8px;
+}
+
+.full-width-btn:hover:not(:disabled) { background: #d0d0d0; }
+.full-width-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+Acceptance criteria:
+
+File input restricted to .csv
+FormData field name is exactly "file"
+Feedback shows inline success or error message
+Report button is disabled until successful upload
+Clear resets all state including report button
+
+--------------------------------------------
+Phase 6 — Upload New Inventory CSV
+--------------------------------------------
+--------------------------------------------
+F-11: Create InventoryUpload component
+--------------------------------------------
+File to create: frontend/src/components/InventoryUpload.js
+Props:
+onSuccess: function
+Required behavior: Render a file upload panel inside the accordion body. The panel contains a column hint, a file browser (.csv only), an Upload & Process button, a Clear button, an inline feedback area, a horizontal divider, and an Update Inventory button disabled until successful upload.
+State:
+jsconst [file, setFile] = useState(null);
+const [feedback, setFeedback] = useState({ message: "", type: "" });
+const [updateEnabled, setUpdateEnabled] = useState(false);
+const [uploading, setUploading] = useState(false);
+Upload & Process API call:
+POST /api/inventory/upload
+Content-Type: multipart/form-data
+Body: FormData with field "file" containing the .csv file
+Response handling:
+
+HTTP 200: response shape { added, updated, skipped, total_rows }. Set feedback to green: ✓ {total_rows} slot(s) ready to update. Enable Update Inventory button.
+HTTP 400/500: set feedback to red with API error message. Keep button disabled.
+Network error: set feedback to red: Network error. Is the backend running?
+
+Update Inventory API call:
+POST /api/inventory/apply
+Content-Type: application/json
+Body: {}
+Response handling:
+
+HTTP 200: show toast: ✓ Inventory updated. Call onSuccess(). Reset panel state.
+HTTP 400/500: show toast with API error message.
+
+Column hint to render:
+Required: ROW, Product, Vending Price
+Optional: stock (integer 0–10), expiration_date (YYYY-MM-DD)
+Acceptance criteria:
+
+File input restricted to .csv
+Upload & Process sends file to /api/inventory/upload
+Update Inventory button disabled until successful upload
+Success triggers onSuccess to refresh machine grid
+Clear resets all state
+
+--------------------------------------------
+Phase 7 — Sales Report
+--------------------------------------------
+--------------------------------------------
+F-12: Create generateSalesReport utility function
+--------------------------------------------
+File to create: frontend/src/utils/generateSalesReport.js
+Required behavior: Export a single async function generateSalesReport() that fetches GET /api/reports/sales, builds a report HTML string, and opens it in a new browser window. If the fetch fails, call showToast with the error message.
+API call:
+GET /api/reports/sales
+Expected response shape:
+json{
+  "generated_at": "2026-04-23T14:30:00",
+  "date_range": "3/10/2026 – 3/17/2026",
+  "total_revenue": 87.50,
+  "total_units": 42,
+  "unique_items": 8,
+  "top_item": {
+    "item_name": "Soda",
+    "slot_id": "A1",
+    "units": 12,
+    "revenue": 24.00
+  },
+  "items": [
+    {
+      "rank": 1,
+      "slot_id": "A1",
+      "item_name": "Soda",
+      "units_sold": 12,
+      "total_revenue": 24.00,
+      "avg_price": 2.00
     }
-    updateStats();
+  ]
+}
+Report window behavior: Build the report HTML string using the response data. The HTML must include:
+
+A sticky black top bar with "UMBC | Sales Report", a Download CSV button, and a Close (window.close()) button
+A report header with generated_at, date_range
+Three summary cards: Total Revenue, Units Sold, Unique Items
+A top-selling item callout block
+A ranked table with columns: #, Slot ID, Item Name, Units Sold, Total Revenue, Avg Price
+A totals row
+A footer
+
+Open the window with:
+jsconst win = window.open("", "_blank", "width=960,height=700,scrollbars=yes,resizable=yes");
+win.document.write(reportHTML);
+win.document.close();
+The Download CSV button inside the report window must use a self-contained downloadCSV() script embedded in the HTML string to trigger a browser file download of the report data as a .csv file.
+Acceptance criteria:
+
+Fetches GET /api/reports/sales
+Opens new window with complete report HTML
+Download CSV saves .csv to local machine
+Close button calls window.close()
+Network and API errors show toast
+
+--------------------------------------------
+Phase 8 — Toast Notifications
+--------------------------------------------
+--------------------------------------------
+F-13: Create global Toast system
+--------------------------------------------
+File to create: frontend/src/components/Toast.js
+File to create: frontend/src/utils/toast.js
+Required behavior: Implement a lightweight global toast system that does not depend on any external library. The toast appears in the bottom-right corner of the screen, shows a message for 3 seconds, then disappears.
+toast.js — singleton event emitter:
+jslet _showToast = null;
+export function registerToast(fn) { _showToast = fn; }
+export function showToast(msg) { if (_showToast) _showToast(msg); }
+Toast.js — component:
+jsximport { registerToast } from "../utils/toast";
+
+function Toast() {
+  const [message, setMessage] = useState("");
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    registerToast((msg) => {
+      setMessage(msg);
+      setVisible(true);
+      setTimeout(() => setVisible(false), 3000);
+    });
+  }, []);
+
+  return (
+    <div className={`toast ${visible ? "show" : ""}`}>
+      {message}
+    </div>
+  );
+}
+Mount Toast in App.js alongside the app layout so it is always available.
+CSS to add in App.css:
+css.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: var(--black);
+  color: white;
+  padding: 10px 18px;
+  font-size: 0.83rem;
+  font-family: 'IBM Plex Mono', monospace;
+  border-left: 4px solid var(--gold);
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.2s, transform 0.2s;
+  z-index: 200;
+  pointer-events: none;
 }
 
-// ── Stats ──
-function updateStats() {
-    let healthy=0, warning=0, critical=0;
-    for (let i=0; i<24; i++) {
-        const c = inventory[i], d = daysUntilExpiration[i];
-        if (d < 0 || c === 0) critical++;
-        else if (c < 3 || d <= 2) warning++;
-        else healthy++;
-    }
-	
-    document.getElementById("sb-healthy").textContent = healthy;
-    document.getElementById("sb-warning").textContent = warning;
-    document.getElementById("sb-critical").textContent = critical;
+.toast.show { opacity: 1; transform: translateY(0); }
+Import showToast in every component that needs it:
+jsimport { showToast } from "../utils/toast";
+Acceptance criteria:
 
-    // populate restock slot dropdown
-    const sel = document.getElementById("restock-slot");
-    sel.innerHTML = '<option value="">– Select Slot –</option>';
-    for (let i=0; i<24; i++) {
-        const opt = document.createElement("option");
-        opt.value = i;
-        opt.textContent = `${slotLabel(i)} – ${items[i][0]}`;
-        sel.appendChild(opt);
-    }
+Toast appears bottom-right after any user action
+Toast disappears after 3 seconds automatically
+showToast can be called from any component without prop drilling
+Multiple rapid calls show the most recent message
+
+--------------------------------------------
+Phase 9 — Styling
+--------------------------------------------
+--------------------------------------------
+F-14: Apply CSS variables and global styles
+--------------------------------------------
+File to modify: frontend/src/App.css
+Required behavior: Add the following CSS variables and global resets at the top of App.css before any other rules. Import IBM Plex Sans and IBM Plex Mono from Google Fonts in frontend/src/index.js or frontend/public/index.html.
+Add to the top of App.css:
+css@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+:root {
+  --gold: #f0a500;
+  --black: #1a1a1a;
+  --panel-bg: #e8e8e8;
+  --sidebar-bg: #d4d4d4;
+  --border: #999;
+  --green: #4caf50;
+  --yellow: #f5c518;
+  --red: #e53935;
+  --slot-border: #444;
+  --header-bg: #c8c8c8;
+  --blue-panel: #cfe2f3;
 }
 
-// ── Popup ──
-function openPopup(index, slotId, name, price) {
-    selectedIndex = index;
-    document.getElementById("popup-text").textContent =
-        `Purchase ${name} (Slot ${slotId}) for $${price.toFixed(2)}?`;
-    document.getElementById("popup").style.display = "flex";
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'IBM Plex Sans', sans-serif;
+  background: #b0b0b0;
+  min-height: 100vh;
 }
+Remove from App.css: Any existing Bootstrap overrides, React default styles, or conflicting layout rules from the original Create React App template.
+Remove from index.js or App.js: Any Bootstrap CSS imports such as import 'bootstrap/dist/css/bootstrap.min.css'.
+Acceptance criteria:
 
-function closePopup() {
-    document.getElementById("popup").style.display = "none";
-}
+All CSS variables are defined and used consistently across all components
+IBM Plex Sans is the base body font
+IBM Plex Mono is applied to slot IDs, prices, and stat values
+No Bootstrap CSS is imported anywhere in the project
 
-function confirmPurchase() {
-    if (selectedIndex !== null && inventory[selectedIndex] > 0) {
-        inventory[selectedIndex]--;
-        showToast(`✓ ${items[selectedIndex][0]} dispensed!`);
-    }
-    closePopup();
-    renderMachine();
-}
+--------------------------------------------
+Phase 10 — Cleanup
+--------------------------------------------
+--------------------------------------------
+F-15: Remove unused files and dependencies
+--------------------------------------------
+Files to delete:
 
-// ── Sidebar tab switch ──
-function switchSidebarTab(tab, btn) {
-    document.querySelectorAll(".nav-tab").forEach(t => t.classList.remove("active"));
-    btn.classList.add("active");
-    document.getElementById("sidebar-dashboard").style.display = tab === "dashboard" ? "block" : "none";
-    document.getElementById("sidebar-admin").style.display = tab === "admin" ? "block" : "none";
-}
+frontend/src/pages/DashboardPage.js
+frontend/src/pages/AdminPage.js
+frontend/src/components/InventoryGrid.js
+frontend/src/components/AlertsBanner.js
+frontend/src/components/StatusIndicator.js
+frontend/src/components/Sidebar.js (original version)
+frontend/src/data/mockInventory.js
 
-// ── Collapsible panels ──
-function togglePanel(bodyId, header) {
-    const body = document.getElementById(bodyId);
-    const isOpen = body.classList.toggle("open");
-    header.querySelector(".toggle-btn").textContent = isOpen ? "▾" : "▸";
-}
+Packages to remove (run npm uninstall for each):
 
-// ── Restock ──
-function doRestock() {
-    const idx = document.getElementById("restock-slot").value;
-    const qty = parseInt(document.getElementById("restock-qty").value);
-    const dateVal = document.getElementById("restock-date").value;
+react-router-dom
+bootstrap
+react-bootstrap
 
-    if (idx === "" || isNaN(qty) || qty < 1) {
-        showToast("⚠ Please fill in all restock fields.");
-        return;
-    }
+Files to verify have no remaining imports of deleted files:
 
-    inventory[parseInt(idx)] = Math.min(10, inventory[parseInt(idx)] + qty);
+frontend/src/App.js
+frontend/src/index.js
 
-    if (dateVal) {
-        const today = new Date();
-        const exp = new Date(dateVal);
-        const diff = Math.round((exp - today) / (1000*60*60*24));
-        daysUntilExpiration[parseInt(idx)] = diff;
-    }
+Acceptance criteria:
 
-    showToast(`✓ ${items[parseInt(idx)][0]} restocked (+${qty})`);
-    clearRestock();
-    renderMachine();
-}
+No import statements reference deleted files
+npm start runs without errors after deletions
+No console warnings about missing modules
+node_modules does not contain bootstrap or react-router-dom after uninstall
 
-function clearRestock() {
-    document.getElementById("restock-slot").value = "";
-    document.getElementById("restock-qty").value = "";
-    document.getElementById("restock-date").value = "";
-}
 
-// ── Toast ──
-function showToast(msg) {
-    const t = document.getElementById("toast");
-    t.textContent = msg;
-    t.classList.add("show");
-    setTimeout(() => t.classList.remove("show"), 3000);
-}
-
-// ── Init ──
-renderMachine();
-</script>
-</body>
-</html>

@@ -35,10 +35,16 @@ class Transaction(db.Model):
     
     def to_dict(self) -> dict:
         """Return a dictionary representation of the transaction."""
+        # Ensure timestamp includes timezone info
+        ts = self.timestamp
+        if ts and ts.tzinfo is None:
+            # If somehow timezone-naive, assume UTC
+            ts = ts.replace(tzinfo=timezone.utc)
+        
         return {
             'transaction_id': self.transaction_id,
             'amount': self.amount,
-            'timestamp': self.timestamp.isoformat(),
+            'timestamp': ts.isoformat() if ts else None,
             'user_id': self.user_id,
             'resolved_slot_id': self.resolved_slot_id
         }

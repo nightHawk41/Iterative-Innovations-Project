@@ -22,6 +22,7 @@ DEFAULT_MOCK_PATH = os.path.abspath(
 # Column name constants — match the headers in transaction_stream_mock.csv
 # ---------------------------------------------------------------------------
 COL_DATE      = "Transaction Date"
+COL_TIME      = " Transaction Time"   # leading space: CSV header has ", Transaction Time"
 COL_PRIMARY   = "Primary Key"
 COL_PATRON    = "Patron Name"
 COL_TRAN_AMT  = "Tran Amt"
@@ -165,7 +166,15 @@ class TransactionProcessor:
             transaction_id = int(str(row[COL_PRIMARY]).strip())
             amount         = round(float(str(row[COL_TRAN_AMT]).strip()), 2)
             user_id        = str(row[COL_PATRON]).strip()[:20]  # VARCHAR(20) limit
-            timestamp      = self._parse_timestamp(str(row[COL_DATE]).strip())
+
+            # Combine date and time columns when both are present.
+            # transaction_stream_mock.csv splits the timestamp across two columns:
+            #   "Transaction Date"  → "3-10-2026"
+            #   " Transaction Time" → " 8:15:00 AM"
+            date_raw = str(row[COL_DATE]).strip()
+            time_raw = str(row.get(COL_TIME, "")).strip()
+            raw_ts   = f"{date_raw} {time_raw}" if time_raw else date_raw
+            timestamp = self._parse_timestamp(raw_ts)
         except (KeyError, ValueError, TypeError) as exc:
             logger.warning(
                 "[TransactionProcessor] Skipping malformed row %s: %s", row, exc
@@ -183,11 +192,19 @@ class TransactionProcessor:
     @staticmethod
     def _parse_timestamp(raw: str) -> datetime:
         """
-        Parse CBORD date strings.  The mock CSV uses M/D/YYYY format.
+        Parse CBORD date strings.
         Falls back to a UTC-aware now() if parsing fails so the row is
         not thrown away over a date formatting quirk.
         """
-        for fmt in ("%m/%d/%Y", "%Y-%m-%d", "%m/%d/%Y %H:%M:%S"):
+        for fmt in (
+            "%m-%d-%Y %I:%M:%S %p",  # 3-10-2026 8:15:00 AM  (mock CSV combined)
+            "%m-%d-%Y %H:%M:%S",     # 3-10-2026 08:15:00
+            "%m-%d-%Y",              # 3-10-2026 (date only)
+            "%m/%d/%Y %I:%M:%S %p",  # 3/10/2026 8:15:00 AM  (slash variant)
+            "%m/%d/%Y %H:%M:%S",     # 3/10/2026 08:15:00
+            "%m/%d/%Y",              # 3/10/2026
+            "%Y-%m-%d",              # 2026-03-10
+        ):
             try:
                 naive = datetime.strptime(raw, fmt)
                 return naive.replace(tzinfo=timezone.utc)
@@ -198,6 +215,7 @@ class TransactionProcessor:
             "[TransactionProcessor] Could not parse date '%s'; using UTC now.", raw
         )
         return datetime.now(timezone.utc)
+
 
     @staticmethod
     def _validate_headers(fieldnames: list, path: str) -> None:

@@ -1,0 +1,25 @@
+ROW,Product,Vending Price, Quantity, Days Until Expiry
+A1,Bic Comfort Pens,8.50, 10, 15
+A2,Starbucks Frappuccino Vanilla,3.50, 10, 5
+A3,Flash Drive,5.01, 10, 365
+A4,4 Expo Dry Erase,8.02, 10, 180
+B1,Zebra Z-Grip Black Pen 2 Pack,3.01, 10, 90
+B2,Dunkin Glazed Donut (Packaged),2.10, 10, 7
+B3,Post-It,4.50, 10, 365
+B4,Papermate Pencil Pack,8.03, 10, 180
+C1,First Aid Kit,5.02, 10, 365
+C2,AA Batteries,6.50, 10, 730
+C3,Index Cards,3.03, 10, 365
+C4,AAA Batteries,6.51, 10, 730
+D1,TISSUES,1.00, 10, 30
+D2,AFRIN,13.01, 10, 180
+D3,DAYQUIL,5.03, 10, 365
+D4,Snickers Bar,1.50, 10, 180
+E1,TYLENOL,3.04, 10, 365
+E2,Skittles Original,1.53, 10, 180
+E3,ADVIL,3.05, 10, 365
+E4,Starburst,1.54, 10, 180
+F1,Doritos Nacho Cheese,1.75, 10, 180
+F2,Pop-Tarts Strawberry,2.05, 10, 180
+F3,My Way,13.02, 10, 365
+F4,Dunkin Iced Coffee Mocha,3.55, 10, 7

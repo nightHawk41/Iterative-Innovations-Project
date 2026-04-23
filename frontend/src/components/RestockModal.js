@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Modal, Button, Form, Alert } from "react-bootstrap";
+import { showToast } from "../utils/toast";
 
 function getTodayString() {
   return new Date().toISOString().split("T")[0];
@@ -101,10 +102,16 @@ function RestockModal({ show, onHide, slots, onRestockSuccess }) {
       });
       const data = await response.json();
       if (!response.ok) {
-        setApiError(data.error ?? "Restock failed. Please try again.");
+        if (response.status === 409) {
+          setApiError("This slot was recently modified. Please try again.");
+        } else {
+          setApiError(data.error ?? "Restock failed. Please try again.");
+        }
       } else {
+        const successSlotId = slotId;
         handleClose();
-        onRestockSuccess();
+        await onRestockSuccess?.();
+        showToast(`✓ Slot ${successSlotId} restocked successfully.`);
       }
     } catch (err) {
       setApiError("Network error. Is the backend running?");
@@ -134,8 +141,6 @@ function RestockModal({ show, onHide, slots, onRestockSuccess }) {
 
       <Form onSubmit={handleSubmit} noValidate>
         <Modal.Body>
-          {apiError && <Alert variant="danger">{apiError}</Alert>}
-
           {/* Slot ID */}
           <Form.Group className="mb-3" controlId="slotId">
             <Form.Label>Slot ID</Form.Label>
@@ -199,6 +204,11 @@ function RestockModal({ show, onHide, slots, onRestockSuccess }) {
         </Modal.Body>
 
         <Modal.Footer>
+          {apiError && (
+            <Alert variant="danger" className="w-100 mb-2">
+              {apiError}
+            </Alert>
+          )}
           <Button variant="secondary" onClick={handleClose} disabled={submitting}>
             Cancel
           </Button>

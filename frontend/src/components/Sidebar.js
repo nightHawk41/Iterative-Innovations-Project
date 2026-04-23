@@ -1,62 +1,45 @@
-import React, { useState } from "react";
-import { NavLink } from "react-router-dom";
+import React from 'react';
+import AdminTab from './AdminTab';
+import DashboardTab from './DashboardTab';
+import { showToast } from '../utils/toast';
 
-function Sidebar() {
-  const [collapsed, setCollapsed] = useState(false);
-
-  const linkClass = ({ isActive }) =>
-    "nav-link text-white" + (isActive ? " active-link" : "");
+function Sidebar({ activeTab, setActiveTab, slots, onInventoryChange }) {
+  function handleHelpClick() {
+    showToast('Help: Green = healthy, Yellow = low/expiring, Red = critical/expired.');
+  }
 
   return (
-    <>
-      {/* Mobile top bar — visible only on small screens */}
-      <nav className="navbar navbar-dark bg-dark d-md-none px-3">
-        <span className="navbar-brand fw-bold">UMBC Vending</span>
+    <aside className="sidebar">
+      <div className="nav-tabs">
         <button
-          className="navbar-toggler"
-          type="button"
-          onClick={() => setCollapsed(!collapsed)}
-          aria-expanded={collapsed}
-          aria-label="Toggle navigation"
+          className={`nav-tab ${activeTab === 'dashboard' ? 'active' : ''}`}
+          onClick={() => setActiveTab('dashboard')}
         >
-          <span className="navbar-toggler-icon" />
+          Dashboard
         </button>
-        {collapsed && (
-          <div className="w-100 mt-2">
-            <ul className="navbar-nav">
-              <li className="nav-item">
-                <NavLink to="/dashboard" className={linkClass} onClick={() => setCollapsed(false)}>
-                  Dashboard
-                </NavLink>
-              </li>
-              <li className="nav-item">
-                <NavLink to="/admin" className={linkClass} onClick={() => setCollapsed(false)}>
-                  Admin Panel
-                </NavLink>
-              </li>
-            </ul>
-          </div>
-        )}
-      </nav>
+        <button
+          className={`nav-tab ${activeTab === 'admin' ? 'active' : ''}`}
+          onClick={() => setActiveTab('admin')}
+        >
+          Admin Panel
+        </button>
+      </div>
 
-      {/* Desktop sidebar — visible only on md+ screens */}
-      <nav className="sidebar d-none d-md-flex flex-column bg-dark text-white p-3">
-        <h5 className="sidebar-brand">UMBC Vending</h5>
-        <hr className="border-secondary" />
-        <ul className="nav flex-column gap-1">
-          <li className="nav-item">
-            <NavLink to="/dashboard" className={linkClass}>
-              Dashboard
-            </NavLink>
-          </li>
-          <li className="nav-item">
-            <NavLink to="/admin" className={linkClass}>
-              Admin Panel
-            </NavLink>
-          </li>
-        </ul>
-      </nav>
-    </>
+      <div className="sidebar-content">
+        {activeTab === 'dashboard' && <DashboardTab slots={slots} />}
+        {activeTab === 'admin' && (
+          <AdminTab
+            slots={slots}
+            onInventoryChange={onInventoryChange}
+          />
+        )}
+      </div>
+
+      <div className="sidebar-footer">
+        <button className="btn" onClick={onInventoryChange}>Reload</button>
+        <button className="btn" onClick={handleHelpClick}>Help</button>
+      </div>
+    </aside>
   );
 }
 

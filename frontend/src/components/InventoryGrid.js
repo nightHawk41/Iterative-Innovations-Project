@@ -18,7 +18,7 @@ function rowSeverityClass(rowSlots) {
   return "text-success";
 }
 
-function InventoryGrid({ slots }) {
+function InventoryGrid({ slots, onSlotSelect }) {
   const [activeKeys, setActiveKeys] = useState([]);
 
   const grouped   = slots && slots.length > 0 ? groupByRow(slots) : {};
@@ -95,6 +95,7 @@ function InventoryGrid({ slots }) {
                         price={slot.price}
                         days_until_expiry={slot.days_until_expiry}
                         status_color={slot.status_color}
+                        onSelect={() => onSlotSelect?.(slot)}
                       />
                     </div>
                   ))}
