@@ -2,9 +2,9 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import TransactionUpload from "./TransactionUpload";
-import { generateSalesReport } from "./SalesReport";
+import { generateSalesReport } from "../utils/generateSalesReport";
 
-jest.mock("./SalesReport", () => ({
+jest.mock("../utils/generateSalesReport", () => ({
   generateSalesReport: jest.fn(),
 }));
 

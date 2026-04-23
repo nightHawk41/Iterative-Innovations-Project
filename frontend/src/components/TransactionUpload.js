@@ -1,6 +1,5 @@
 import React, { useState } from "react";
-import { generateSalesReport } from "./SalesReport";
-import { showToast } from "../utils/toast";
+import { generateSalesReport } from "../utils/generateSalesReport";
 
 function TransactionUpload({ onSuccess }) {
   const [file, setFile]         = useState(null);
@@ -66,9 +65,7 @@ function TransactionUpload({ onSuccess }) {
 
   async function handleGenerateSalesReport() {
     setReportLoading(true);
-    await generateSalesReport({
-      onError: (message) => showToast(message),
-    });
+    await generateSalesReport();
     setReportLoading(false);
   }
 
