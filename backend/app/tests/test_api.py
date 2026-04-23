@@ -8,7 +8,8 @@ Covers:
 
 import pytest
 import json
-from datetime import date, timedelta
+import io
+from datetime import date, datetime, timedelta, timezone
 
 
 # ---------------------------------------------------------------------------
@@ -319,6 +320,30 @@ class TestPostRestock:
             json={"slot_id": "A1", "expiration_date": future},
         )
         assert resp.status_code == 400
+
+    def test_exceeding_capacity_returns_human_readable_error_with_max_allowed(self, client):
+        """
+        B-14: The error should be human-readable and include max allowed quantity
+        (10 - current_stock) so frontend can display it inline.
+        """
+        future = (date.today() + timedelta(days=30)).isoformat()
+        current = next(s for s in _json(client.get("/api/inventory")) if s["slot_id"] == "A1")
+        current_stock = current["quantity"]
+        max_allowed = 10 - current_stock
+
+        # 11 always exceeds capacity because max slot capacity is 10.
+        resp = client.post(
+            "/api/restock",
+            json={"slot_id": "A1", "quantity_added": 11, "expiration_date": future},
+        )
+        assert resp.status_code == 400
+
+        body = _json(resp)
+        message = body.get("error", "")
+        assert isinstance(message, str) and message.strip()
+        assert "Cannot exceed maximum capacity of 10" in message
+        assert "You can only add up to" in message
+        assert f"{max_allowed}" in message
 
 
 # ===========================================================================
@@ -665,3 +690,376 @@ class TestGetTransactions:
             # Should be ISO format with timezone
             assert "T" in timestamp
             assert "+" in timestamp or "Z" in timestamp
+
+
+# ===========================================================================
+# GET /api/reports/sales
+# ===========================================================================
+
+class TestGetSalesReport:
+
+    def _insert_transactions(self, app, rows):
+        """Insert transaction fixtures directly for deterministic report assertions."""
+        from app import db
+        from app.models.transaction import Transaction
+
+        with app.app_context():
+            for row in rows:
+                db.session.add(
+                    Transaction(
+                        transaction_id=row["transaction_id"],
+                        amount=row["amount"],
+                        timestamp=row["timestamp"],
+                        user_id=row.get("user_id", "Test User"),
+                        resolved_slot_id=row.get("resolved_slot_id"),
+                    )
+                )
+            db.session.commit()
+
+    def test_returns_200(self, client):
+        resp = client.get("/api/reports/sales")
+        assert resp.status_code == 200
+
+    def test_returns_required_top_level_fields(self, client):
+        data = _json(client.get("/api/reports/sales"))
+        required = {
+            "items",
+            "total_revenue",
+            "total_units",
+            "unique_items",
+            "date_range",
+            "generated_at",
+            "top_item",
+            "transaction_count",
+            "has_transactions",
+        }
+        assert required == set(data.keys())
+
+    def test_empty_report_shape_when_no_transactions(self, client):
+        data = _json(client.get("/api/reports/sales"))
+
+        assert data["items"] == []
+        assert data["total_revenue"] == 0.0
+        assert data["total_units"] == 0
+        assert data["unique_items"] == 0
+        assert data["date_range"] == {"start": None, "end": None}
+        assert data["top_item"] is None
+        assert data["transaction_count"] == 0
+        assert data["has_transactions"] is False
+
+    def test_aggregates_resolved_transactions_by_item(self, client, app):
+        self._insert_transactions(
+            app,
+            [
+                {
+                    "transaction_id": 9001,
+                    "amount": 2.15,
+                    "timestamp": datetime(2026, 3, 10, 8, 15, 0, tzinfo=timezone.utc),
+                    "resolved_slot_id": "A1",
+                },
+                {
+                    "transaction_id": 9002,
+                    "amount": 2.15,
+                    "timestamp": datetime(2026, 3, 10, 9, 15, 0, tzinfo=timezone.utc),
+                    "resolved_slot_id": "A1",
+                },
+                {
+                    "transaction_id": 9003,
+                    "amount": 2.35,
+                    "timestamp": datetime(2026, 3, 10, 10, 15, 0, tzinfo=timezone.utc),
+                    "resolved_slot_id": "A2",
+                },
+            ],
+        )
+
+        data = _json(client.get("/api/reports/sales"))
+
+        assert data["total_units"] == 3
+        assert data["total_revenue"] == 6.65
+        assert data["unique_items"] == 2
+
+        first = data["items"][0]
+        second = data["items"][1]
+
+        assert first["item_name"] == "Granola Bar"
+        assert first["units_sold"] == 2
+        assert first["total_revenue"] == 4.3
+        assert first["average_price"] == 2.15
+
+        assert second["item_name"] == "Trail Mix"
+        assert second["units_sold"] == 1
+        assert second["total_revenue"] == 2.35
+        assert second["average_price"] == 2.35
+
+    def test_items_sorted_by_total_revenue_desc(self, client, app):
+        self._insert_transactions(
+            app,
+            [
+                {
+                    "transaction_id": 9011,
+                    "amount": 1.95,
+                    "timestamp": datetime(2026, 3, 10, 8, 0, 0, tzinfo=timezone.utc),
+                    "resolved_slot_id": "A4",
+                },
+                {
+                    "transaction_id": 9012,
+                    "amount": 1.95,
+                    "timestamp": datetime(2026, 3, 10, 8, 5, 0, tzinfo=timezone.utc),
+                    "resolved_slot_id": "A4",
+                },
+                {
+                    "transaction_id": 9013,
+                    "amount": 2.55,
+                    "timestamp": datetime(2026, 3, 10, 8, 10, 0, tzinfo=timezone.utc),
+                    "resolved_slot_id": "A3",
+                },
+            ],
+        )
+
+        data = _json(client.get("/api/reports/sales"))
+        assert data["items"][0]["total_revenue"] >= data["items"][1]["total_revenue"]
+
+    def test_unresolved_transactions_excluded_from_sales_rollup(self, client, app):
+        self._insert_transactions(
+            app,
+            [
+                {
+                    "transaction_id": 9021,
+                    "amount": 2.15,
+                    "timestamp": datetime(2026, 3, 10, 8, 0, 0, tzinfo=timezone.utc),
+                    "resolved_slot_id": "A1",
+                },
+                {
+                    "transaction_id": 9022,
+                    "amount": 99.99,
+                    "timestamp": datetime(2026, 3, 10, 8, 1, 0, tzinfo=timezone.utc),
+                    "resolved_slot_id": None,
+                },
+            ],
+        )
+
+        data = _json(client.get("/api/reports/sales"))
+
+        # Only resolved transactions should contribute to item rollup and totals.
+        assert data["total_units"] == 1
+        assert data["total_revenue"] == 2.15
+        assert data["unique_items"] == 1
+        assert len(data["items"]) == 1
+
+        # Guard fields count all transactions in the system.
+        assert data["transaction_count"] == 2
+        assert data["has_transactions"] is True
+
+    def test_date_range_and_generated_at_are_iso_strings(self, client, app):
+        self._insert_transactions(
+            app,
+            [
+                {
+                    "transaction_id": 9031,
+                    "amount": 2.15,
+                    "timestamp": datetime(2026, 3, 10, 8, 15, 0, tzinfo=timezone.utc),
+                    "resolved_slot_id": "A1",
+                },
+                {
+                    "transaction_id": 9032,
+                    "amount": 2.35,
+                    "timestamp": datetime(2026, 3, 10, 9, 20, 0, tzinfo=timezone.utc),
+                    "resolved_slot_id": "A2",
+                },
+            ],
+        )
+
+        data = _json(client.get("/api/reports/sales"))
+        start = data["date_range"]["start"]
+        end = data["date_range"]["end"]
+        generated_at = data["generated_at"]
+
+        assert isinstance(start, str) and "T" in start and ("+" in start or "Z" in start)
+        assert isinstance(end, str) and "T" in end and ("+" in end or "Z" in end)
+        assert isinstance(generated_at, str) and "T" in generated_at and ("+" in generated_at or "Z" in generated_at)
+
+        assert start.startswith("2026-03-10T08:15:00")
+        assert end.startswith("2026-03-10T09:20:00")
+
+    def test_top_item_matches_highest_revenue_item(self, client, app):
+        self._insert_transactions(
+            app,
+            [
+                {
+                    "transaction_id": 9041,
+                    "amount": 2.55,
+                    "timestamp": datetime(2026, 3, 10, 8, 0, 0, tzinfo=timezone.utc),
+                    "resolved_slot_id": "A3",
+                },
+                {
+                    "transaction_id": 9042,
+                    "amount": 2.55,
+                    "timestamp": datetime(2026, 3, 10, 8, 5, 0, tzinfo=timezone.utc),
+                    "resolved_slot_id": "A3",
+                },
+                {
+                    "transaction_id": 9043,
+                    "amount": 2.15,
+                    "timestamp": datetime(2026, 3, 10, 8, 10, 0, tzinfo=timezone.utc),
+                    "resolved_slot_id": "A1",
+                },
+            ],
+        )
+
+        data = _json(client.get("/api/reports/sales"))
+        top_item = data["top_item"]
+
+        assert top_item is not None
+        assert top_item["item_name"] == "Protein Bar"
+        assert top_item["units_sold"] == 2
+        assert top_item["total_revenue"] == 5.1
+
+    def test_guard_fields_true_when_any_transaction_exists(self, client, app):
+        self._insert_transactions(
+            app,
+            [
+                {
+                    "transaction_id": 9051,
+                    "amount": 77.77,
+                    "timestamp": datetime(2026, 3, 10, 8, 0, 0, tzinfo=timezone.utc),
+                    "resolved_slot_id": None,
+                }
+            ],
+        )
+
+        data = _json(client.get("/api/reports/sales"))
+        assert data["transaction_count"] == 1
+        assert data["has_transactions"] is True
+
+
+# ===========================================================================
+# POST /api/inventory/upload
+# ===========================================================================
+
+class TestPostInventoryUpload:
+
+    def test_missing_file_field_returns_400(self, client):
+        resp = client.post("/api/inventory/upload", data={}, content_type="multipart/form-data")
+        assert resp.status_code == 400
+
+    def test_empty_filename_returns_400(self, client):
+        resp = client.post(
+            "/api/inventory/upload",
+            data={"file": (io.BytesIO(b"ROW,Product,Vending Price\nA1,Test,1.00\n"), "")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 400
+
+    def test_invalid_csv_schema_returns_400(self, client):
+        # Missing required headers ROW/Product/Vending Price.
+        bad_csv = b"slot_id,item_name,price\nA1,Test Item,1.23\n"
+        resp = client.post(
+            "/api/inventory/upload",
+            data={"file": (io.BytesIO(bad_csv), "inventory_bad.csv")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 400
+
+    def test_upload_updates_existing_inventory(self, client):
+        payload = (
+            "ROW,Product,Vending Price\n"
+            "A1,Updated Granola,4.20\n"
+            "A2,Updated Trail Mix,4.50\n"
+        ).encode("utf-8")
+
+        resp = client.post(
+            "/api/inventory/upload",
+            data={"file": (io.BytesIO(payload), "inventory_config_upload.csv")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 200
+
+        body = _json(resp)
+        assert body["total_rows"] == 2
+        assert body["updated"] >= 2
+
+        inventory = _json(client.get("/api/inventory"))
+        a1 = next(s for s in inventory if s["slot_id"] == "A1")
+        a2 = next(s for s in inventory if s["slot_id"] == "A2")
+
+        assert a1["item_name"] == "Updated Granola"
+        assert a1["price"] == 4.2
+        assert a2["item_name"] == "Updated Trail Mix"
+        assert a2["price"] == 4.5
+
+    def test_upload_applies_optional_stock_and_expiration_date(self, client):
+        payload = (
+            "ROW,Product,Vending Price,stock,expiration_date\n"
+            "A1,Granola Premium,6.25,9,2031-01-15\n"
+        ).encode("utf-8")
+
+        resp = client.post(
+            "/api/inventory/upload",
+            data={"file": (io.BytesIO(payload), "inventory_with_optional_fields.csv")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 200
+
+        inventory = _json(client.get("/api/inventory"))
+        a1 = next(s for s in inventory if s["slot_id"] == "A1")
+
+        assert a1["item_name"] == "Granola Premium"
+        assert a1["price"] == 6.25
+        assert a1["quantity"] == 9
+        assert a1["expiration_date"] == "2031-01-15"
+
+    def test_upload_preserves_existing_stock_and_expiration_when_columns_absent(self, client):
+        # First upload sets explicit stock/expiration_date values.
+        baseline_payload = (
+            "ROW,Product,Vending Price,stock,expiration_date\n"
+            "A2,Trail Mix Baseline,7.10,4,2030-06-01\n"
+        ).encode("utf-8")
+        baseline_resp = client.post(
+            "/api/inventory/upload",
+            data={"file": (io.BytesIO(baseline_payload), "inventory_baseline.csv")},
+            content_type="multipart/form-data",
+        )
+        assert baseline_resp.status_code == 200
+
+        # Second upload omits stock/expiration columns; should preserve existing values.
+        update_payload = (
+            "ROW,Product,Vending Price\n"
+            "A2,Trail Mix Rename Only,7.55\n"
+        ).encode("utf-8")
+        update_resp = client.post(
+            "/api/inventory/upload",
+            data={"file": (io.BytesIO(update_payload), "inventory_no_optional.csv")},
+            content_type="multipart/form-data",
+        )
+        assert update_resp.status_code == 200
+
+        inventory = _json(client.get("/api/inventory"))
+        a2 = next(s for s in inventory if s["slot_id"] == "A2")
+
+        assert a2["item_name"] == "Trail Mix Rename Only"
+        assert a2["price"] == 7.55
+        assert a2["quantity"] == 4
+        assert a2["expiration_date"] == "2030-06-01"
+
+    def test_upload_supports_quantity_and_days_until_expiry_aliases(self, client):
+        payload = (
+            "ROW,Product,Vending Price,Quantity,Days Until Expiry\n"
+            "A3,Protein Alias,5.80,8,30\n"
+        ).encode("utf-8")
+
+        resp = client.post(
+            "/api/inventory/upload",
+            data={"file": (io.BytesIO(payload), "inventory_alias_columns.csv")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 200
+
+        inventory = _json(client.get("/api/inventory"))
+        a3 = next(s for s in inventory if s["slot_id"] == "A3")
+
+        assert a3["item_name"] == "Protein Alias"
+        assert a3["price"] == 5.8
+        assert a3["quantity"] == 8
+        # Allow small test-runtime drift around date arithmetic.
+        expected_days = 30
+        assert abs(a3["days_until_expiry"] - expected_days) <= 1

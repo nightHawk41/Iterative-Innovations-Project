@@ -9,9 +9,13 @@ B-1 (POST /api/purchase), and the D-2 requirement that ConcurrencyError
 maps to HTTP 409 Conflict.
 """
 
+import os
+import tempfile
+
 from flask import Blueprint, jsonify, request
 
 from app.services.inventory_service import ConcurrencyError, InventoryService
+from app.utils.seed import seed_database
 
 inventory_bp = Blueprint("inventory", __name__)
 _service = InventoryService()
@@ -75,6 +79,59 @@ def get_inventory_summary():
         }), 200
     except Exception as exc:
         return jsonify({"error": str(exc), "status": 500}), 500
+
+
+# ---------------------------------------------------------------------------
+# POST /api/inventory/upload
+# ---------------------------------------------------------------------------
+
+@inventory_bp.route("/api/inventory/upload", methods=["POST"])
+def upload_inventory_csv():
+    """
+    Accepts a multipart CSV upload and updates inventory records from its rows.
+
+    Expected columns:
+      - ROW
+      - Product
+      - Vending Price
+
+    Optional columns are handled in seed utilities (B-13).
+
+    Success (200):
+      {"added": int, "updated": int, "skipped": int, "total_rows": int, "config_path": str}
+
+    Failure responses:
+      400 — missing file, invalid csv schema/content, or seed error
+      500 — unexpected server error
+    """
+    if "file" not in request.files:
+        return jsonify({"error": "Missing required file field: file.", "status": 400}), 400
+
+    uploaded = request.files["file"]
+    if not uploaded or not uploaded.filename:
+        return jsonify({"error": "Uploaded file has no filename.", "status": 400}), 400
+
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False, mode="wb") as tmp:
+            uploaded.save(tmp)
+            tmp_path = tmp.name
+
+        summary = seed_database(config_path=tmp_path, update_existing=True)
+        if summary.get("error"):
+            return jsonify({"error": summary["error"], "status": 400}), 400
+
+        return jsonify(summary), 200
+
+    except (KeyError, ValueError) as exc:
+        return jsonify({"error": str(exc), "status": 400}), 400
+
+    except Exception as exc:
+        return jsonify({"error": str(exc), "status": 500}), 500
+
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
 
 
 # ---------------------------------------------------------------------------

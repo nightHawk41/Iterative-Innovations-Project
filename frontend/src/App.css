@@ -152,9 +152,18 @@
   background: #fff;
 }
 
-.slot-card:hover {
+.slot-card.clickable:hover {
   box-shadow: 0 3px 10px rgba(0,0,0,0.1);
   transform: translateY(-1px);
+}
+
+.slot-card.clickable {
+  cursor: pointer;
+}
+
+.slot-card.disabled {
+  cursor: not-allowed;
+  opacity: 0.75;
 }
 
 .slot-id {
@@ -196,4 +205,24 @@
   font-size: 0.65rem;
   padding: 0.2em 0.55em;
   letter-spacing: 0.3px;
+}
+
+.app-toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1200;
+  padding: 10px 16px;
+  border-radius: 6px;
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+}
+
+.app-toast-success {
+  background: #198754;
+}
+
+.app-toast-danger {
+  background: #dc3545;
 }
