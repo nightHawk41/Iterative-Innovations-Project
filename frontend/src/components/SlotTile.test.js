@@ -3,13 +3,13 @@ import userEvent from '@testing-library/user-event';
 
 import SlotTile, { getColorClass } from './SlotTile';
 
-jest.mock('./PurchaseModal', () => function MockPurchaseModal({ slot, onConfirm, onHide }) {
+jest.mock('./PurchaseModal', () => function MockPurchaseModal({ slot, onSuccess, onClose }) {
   return (
     <div>
       <h3>Confirm Purchase</h3>
       <div>Slot: {slot.slot_id}</div>
-      <button onClick={onConfirm}>Confirm</button>
-      <button onClick={onHide}>Cancel</button>
+      <button onClick={onSuccess}>Confirm</button>
+      <button onClick={onClose}>Cancel</button>
     </div>
   );
 });

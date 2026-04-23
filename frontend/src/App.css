@@ -125,6 +125,36 @@ body {
 .slot-stock { font-size: 0.65rem; opacity: 0.9; }
 .slot-exp { font-size: 0.6rem; opacity: 0.8; margin-top: 2px; }
 
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 100;
+}
+
+.modal-content {
+  background: var(--panel-bg);
+  border: 2px solid var(--border);
+  padding: 24px;
+  width: 320px;
+}
+
+.modal-content h3 {
+  font-size: 0.95rem;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+.modal-content p {
+  font-size: 0.88rem;
+  margin-bottom: 16px;
+  color: #333;
+}
+
 .sidebar {
   width: 280px;
   min-height: 100vh;

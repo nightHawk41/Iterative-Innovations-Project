@@ -1,32 +1,53 @@
-import React from "react";
-import { Button, Modal } from "react-bootstrap";
+import React, { useState } from 'react';
+import { showToast } from '../utils/toast';
 
-function PurchaseModal({ show, slot, submitting, onConfirm, onHide }) {
+function PurchaseModal({ slot, onClose, onSuccess }) {
+  const [submitting, setSubmitting] = useState(false);
+
   if (!slot) {
     return null;
   }
 
+  async function handleConfirm() {
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/purchase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slot_id: slot.slot_id }),
+      });
+
+      if (res.ok) {
+        showToast(`✓ ${slot.item_name} dispensed!`);
+        await onSuccess?.();
+      } else if (res.status === 409) {
+        showToast('This item is out of stock.');
+        onClose?.();
+      } else {
+        showToast('This item is unavailable.');
+        onClose?.();
+      }
+    } catch {
+      showToast('Network error. Is the backend running?');
+      onClose?.();
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
-    <Modal show={show} onHide={onHide} centered>
-      <Modal.Header closeButton>
-        <Modal.Title>Confirm Purchase</Modal.Title>
-      </Modal.Header>
-      <Modal.Body>
-        <p className="mb-2">
-          Purchase <strong>{slot.item_name}</strong>?
-        </p>
-        <div className="text-muted small">Slot: {slot.slot_id}</div>
-        <div className="text-muted small">Price: ${slot.price.toFixed(2)}</div>
-      </Modal.Body>
-      <Modal.Footer>
-        <Button variant="secondary" onClick={onHide} disabled={submitting}>
-          Cancel
-        </Button>
-        <Button variant="primary" onClick={onConfirm} disabled={submitting}>
-          {submitting ? "Confirming…" : "Confirm"}
-        </Button>
-      </Modal.Footer>
-    </Modal>
+    <div className="modal-overlay">
+      <div className="modal-content">
+        <h3>Confirm Purchase</h3>
+        <p>Purchase {slot.item_name} (Slot {slot.slot_id}) for ${slot.price.toFixed(2)}?</p>
+        <div className="btn-row">
+          <button className="btn primary" onClick={handleConfirm} disabled={submitting}>
+            {submitting ? 'Processing…' : 'Confirm'}
+          </button>
+          <button className="btn" onClick={onClose} disabled={submitting}>Cancel</button>
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -3,7 +3,6 @@ import AppHeader from './components/AppHeader';
 import Sidebar from './components/Sidebar';
 import MachinePanel from './components/MachinePanel';
 import Toast from './components/Toast';
-import { showToast } from './utils/toast';
 import './App.css';
 
 const EMPTY_SUMMARY = {
@@ -90,38 +89,6 @@ function App() {
     }
   }
 
-  async function handleSlotPurchase(slotToPurchase) {
-    if (!slotToPurchase) {
-      return;
-    }
-
-    try {
-      const response = await fetch('/api/purchase', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ slot_id: slotToPurchase.slot_id }),
-      });
-
-      if (response.status === 200) {
-        showToast(`✓ ${slotToPurchase.item_name} dispensed!`);
-        await fetchInventory();
-        return;
-      }
-
-      if (response.status === 409) {
-        showToast('This item is out of stock.');
-      } else if (response.status === 400) {
-        showToast('This item is unavailable.');
-      } else {
-        showToast('Purchase failed. Please try again.');
-      }
-    } catch (err) {
-      showToast('Network error. Is the backend running?');
-    }
-  }
-
   useEffect(() => { fetchInventory(); }, []);
 
   return (
@@ -145,7 +112,7 @@ function App() {
               <div style={{ padding: '2rem', textAlign: 'center' }}>Loading…</div>
             </section>
           )
-          : <MachinePanel slots={slots} onPurchaseSuccess={handleSlotPurchase} />
+          : <MachinePanel slots={slots} onPurchaseSuccess={fetchInventory} />
         }
       </div>
       <Toast />

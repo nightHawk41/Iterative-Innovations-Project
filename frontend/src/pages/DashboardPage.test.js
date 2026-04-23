@@ -32,6 +32,25 @@ jest.mock("../components/InventoryGrid", () => function InventoryGrid({ slots, o
   );
 });
 
+jest.mock("../components/PurchaseModal", () => function PurchaseModal({ slot, onConfirm, onHide, onSuccess, onClose }) {
+  if (!slot) {
+    return null;
+  }
+
+  return (
+    <div>
+      <h3>Confirm Purchase</h3>
+      <p>
+        Purchase <strong>{slot.item_name}</strong>?
+      </p>
+      <div>Slot: {slot.slot_id}</div>
+      <div>Price: ${slot.price.toFixed(2)}</div>
+      <button type="button" onClick={onConfirm || onSuccess}>Confirm</button>
+      <button type="button" onClick={onHide || onClose}>Cancel</button>
+    </div>
+  );
+});
+
 const baseSlot = {
   slot_id: "A1",
   item_name: "Granola Bar",

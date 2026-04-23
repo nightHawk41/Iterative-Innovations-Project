@@ -10,21 +10,10 @@ export function getColorClass(quantity, days) {
 
 function SlotTile({ slot, onPurchaseSuccess }) {
   const [showModal, setShowModal] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
 
   const colorClass = getColorClass(slot.quantity, slot.days_until_expiry);
   const isDisabled = colorClass === 'disabled';
   const isExpired = slot.days_until_expiry <= 0;
-
-  async function handleConfirm() {
-    setSubmitting(true);
-    try {
-      await onPurchaseSuccess?.(slot);
-      setShowModal(false);
-    } finally {
-      setSubmitting(false);
-    }
-  }
 
   return (
     <>
@@ -45,11 +34,12 @@ function SlotTile({ slot, onPurchaseSuccess }) {
 
       {showModal && (
         <PurchaseModal
-          show={showModal}
           slot={slot}
-          submitting={submitting}
-          onConfirm={handleConfirm}
-          onHide={() => setShowModal(false)}
+          onClose={() => setShowModal(false)}
+          onSuccess={async () => {
+            setShowModal(false);
+            await onPurchaseSuccess?.();
+          }}
         />
       )}
     </>
