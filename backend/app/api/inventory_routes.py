@@ -38,6 +38,46 @@ def get_inventory():
 
 
 # ---------------------------------------------------------------------------
+# GET /api/inventory/summary
+# ---------------------------------------------------------------------------
+
+@inventory_bp.route("/api/inventory/summary", methods=["GET"])
+def get_inventory_summary():
+    """
+    Returns a summary of inventory counts by status.
+
+    Response (200):
+        {
+            "total_slots": 24,
+            "healthy": 20,
+            "low_expiring": 3,
+            "critical_out": 1
+        }
+
+    The counts are based on slot status_color:
+        - healthy: green slots (not low and not expiring soon)
+        - low_expiring: yellow slots (low stock or expiring soon)
+        - critical_out: red slots (critically low stock or expired)
+    """
+    try:
+        slots = _service.get_inventory()
+        
+        total_slots = len(slots)
+        healthy = sum(1 for slot in slots if slot.get("status_color") == "green")
+        low_expiring = sum(1 for slot in slots if slot.get("status_color") == "yellow")
+        critical_out = sum(1 for slot in slots if slot.get("status_color") == "red")
+        
+        return jsonify({
+            "total_slots": total_slots,
+            "healthy": healthy,
+            "low_expiring": low_expiring,
+            "critical_out": critical_out,
+        }), 200
+    except Exception as exc:
+        return jsonify({"error": str(exc), "status": 500}), 500
+
+
+# ---------------------------------------------------------------------------
 # POST /api/restock
 # ---------------------------------------------------------------------------
 

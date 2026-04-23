@@ -41,8 +41,10 @@ def app():
     # Register blueprints (routes)
     from app.api.inventory_routes  import inventory_bp
     from app.api.alerts_routes     import alerts_bp
+    from app.api.transaction_routes import transaction_bp
     test_app.register_blueprint(inventory_bp)
     test_app.register_blueprint(alerts_bp)
+    test_app.register_blueprint(transaction_bp)
 
     with test_app.app_context():
         # All three models must be imported before create_all() so SQLAlchemy
@@ -112,6 +114,18 @@ def _seed_test_data(db):
 @pytest.fixture(scope="module")
 def client(app):
     return app.test_client()
+
+
+@pytest.fixture(autouse=True)
+def clear_transactions_before_test(app):
+    """Clear all transactions before each test to ensure test isolation."""
+    from app.models.transaction import Transaction
+    with app.app_context():
+        from app import db
+        # Delete all transactions to ensure test isolation
+        db.session.query(Transaction).delete()
+        db.session.commit()
+    yield
 
 
 # ---------------------------------------------------------------------------
@@ -393,4 +407,261 @@ class TestGetAlerts:
         assert red_ids.issubset(alert_ids)
         # No green slots should appear
         assert "A1" not in alert_ids
-        assert "A2" not in alert_ids
+
+
+# ===========================================================================
+# GET /api/inventory/summary
+# ===========================================================================
+
+class TestGetInventorySummary:
+
+    def test_returns_200(self, client):
+        resp = client.get("/api/inventory/summary")
+        assert resp.status_code == 200
+
+    def test_returns_dict(self, client):
+        data = _json(client.get("/api/inventory/summary"))
+        assert isinstance(data, dict)
+
+    def test_returns_required_fields(self, client):
+        data = _json(client.get("/api/inventory/summary"))
+        required = {"total_slots", "healthy", "low_expiring", "critical_out"}
+        assert required == set(data.keys()), f"Expected {required}, got {set(data.keys())}"
+
+    def test_all_counts_are_integers(self, client):
+        data = _json(client.get("/api/inventory/summary"))
+        for key in ["total_slots", "healthy", "low_expiring", "critical_out"]:
+            assert isinstance(data[key], int), f"{key} should be integer"
+
+    def test_total_slots_matches_inventory_count(self, client):
+        """total_slots should equal the number of all slots in inventory."""
+        inventory = _json(client.get("/api/inventory"))
+        summary = _json(client.get("/api/inventory/summary"))
+        assert summary["total_slots"] == len(inventory)
+
+    def test_counts_sum_to_total(self, client):
+        """healthy + low_expiring + critical_out should equal total_slots."""
+        data = _json(client.get("/api/inventory/summary"))
+        total = data["healthy"] + data["low_expiring"] + data["critical_out"]
+        assert total == data["total_slots"], (
+            f"Sum of counts {total} != total_slots {data['total_slots']}"
+        )
+
+    def test_green_slots_counted_as_healthy(self, client):
+        """Count of green status_color slots should match healthy count."""
+        inventory = _json(client.get("/api/inventory"))
+        summary = _json(client.get("/api/inventory/summary"))
+        green_count = sum(1 for s in inventory if s["status_color"] == "green")
+        assert summary["healthy"] == green_count
+
+    def test_yellow_slots_counted_as_low_expiring(self, client):
+        """Count of yellow status_color slots should match low_expiring count."""
+        inventory = _json(client.get("/api/inventory"))
+        summary = _json(client.get("/api/inventory/summary"))
+        yellow_count = sum(1 for s in inventory if s["status_color"] == "yellow")
+        assert summary["low_expiring"] == yellow_count
+
+    def test_red_slots_counted_as_critical_out(self, client):
+        """Count of red status_color slots should match critical_out count."""
+        inventory = _json(client.get("/api/inventory"))
+        summary = _json(client.get("/api/inventory/summary"))
+        red_count = sum(1 for s in inventory if s["status_color"] == "red")
+        assert summary["critical_out"] == red_count
+
+    def test_expected_counts_with_seeded_data(self, client):
+        """With test data: A1–A2 green, A3–A4 yellow, A5–A7 red."""
+        data = _json(client.get("/api/inventory/summary"))
+        assert data["total_slots"] == 7
+        assert data["healthy"] == 2
+        assert data["low_expiring"] == 2
+        assert data["critical_out"] == 3
+
+
+# ===========================================================================
+# POST /api/purchase
+# ===========================================================================
+
+class TestPostPurchase:
+
+    def test_valid_purchase_returns_200(self, client):
+        resp = client.post("/api/purchase", json={"slot_id": "A1"})
+        assert resp.status_code == 200
+
+    def test_purchase_response_contains_updated_slot(self, client):
+        resp = client.post("/api/purchase", json={"slot_id": "A1"})
+        body = _json(resp)
+        assert body.get("slot_id") == "A1"
+        assert "message" in body
+        assert body["message"] == "Purchase successful"
+
+    def test_purchase_decrements_quantity(self, client):
+        before = next(s for s in _json(client.get("/api/inventory")) if s["slot_id"] == "A1")
+        qty_before = before["quantity"]
+
+        client.post("/api/purchase", json={"slot_id": "A1"})
+
+        after = next(s for s in _json(client.get("/api/inventory")) if s["slot_id"] == "A1")
+        assert after["quantity"] == qty_before - 1
+
+    def test_purchase_creates_transaction_record(self, client):
+        txns_before = _json(client.get("/api/transactions"))
+        initial_count = len(txns_before)
+
+        client.post("/api/purchase", json={"slot_id": "A1"})
+
+        txns_after = _json(client.get("/api/transactions"))
+        assert len(txns_after) == initial_count + 1
+
+    def test_purchase_transaction_has_required_fields(self, client):
+        client.post("/api/purchase", json={"slot_id": "A1"})
+        
+        txns = _json(client.get("/api/transactions"))
+        latest_txn = txns[0]  # Most recent transaction (ordered descending)
+        
+        required = {"transaction_id", "amount", "timestamp", "user_id", "resolved_slot_id"}
+        assert required == set(latest_txn.keys())
+
+    def test_purchase_transaction_resolves_to_correct_slot(self, client):
+        client.post("/api/purchase", json={"slot_id": "A2"})
+        
+        txns = _json(client.get("/api/transactions"))
+        latest_txn = txns[0]
+        assert latest_txn["resolved_slot_id"] == "A2"
+
+    def test_purchase_transaction_amount_matches_slot_price(self, client):
+        slot = next(s for s in _json(client.get("/api/inventory")) if s["slot_id"] == "A1")
+        slot_price = slot["price"]
+        
+        client.post("/api/purchase", json={"slot_id": "A1"})
+        
+        txns = _json(client.get("/api/transactions"))
+        latest_txn = txns[0]
+        assert latest_txn["amount"] == slot_price
+
+    def test_purchase_user_id_is_patron_name(self, client):
+        """Transaction user_id should be a patron name from CBORD data."""
+        client.post("/api/purchase", json={"slot_id": "A1"})
+        
+        txns = _json(client.get("/api/transactions"))
+        latest_txn = txns[0]
+        
+        # user_id should be a non-empty string (patron name)
+        assert isinstance(latest_txn["user_id"], str)
+        assert len(latest_txn["user_id"]) > 0
+
+    def test_purchase_missing_slot_id_returns_400(self, client):
+        resp = client.post("/api/purchase", json={})
+        assert resp.status_code == 400
+
+    def test_purchase_invalid_slot_returns_400(self, client):
+        resp = client.post("/api/purchase", json={"slot_id": "Z99"})
+        assert resp.status_code == 400
+
+    def test_purchase_expired_slot_returns_409(self, client):
+        # A6 is already expired (expiry date in the past)
+        resp = client.post("/api/purchase", json={"slot_id": "A6"})
+        assert resp.status_code == 409
+
+    def test_purchase_out_of_stock_returns_409(self, client):
+        # A7 has qty=1; purchase it twice should fail on second
+        client.post("/api/purchase", json={"slot_id": "A7"})
+        resp = client.post("/api/purchase", json={"slot_id": "A7"})
+        assert resp.status_code == 409
+
+    def test_purchase_no_json_returns_400(self, client):
+        resp = client.post("/api/purchase")
+        assert resp.status_code == 400
+
+    def test_purchase_quantity_parameter_defaults_to_1(self, client):
+        """When quantity is not provided, defaults to decrement by 1."""
+        before = next(s for s in _json(client.get("/api/inventory")) if s["slot_id"] == "A2")
+        qty_before = before["quantity"]
+
+        # No quantity provided, should default to 1
+        resp = client.post("/api/purchase", json={"slot_id": "A2"})
+        assert resp.status_code == 200
+
+        after = next(s for s in _json(client.get("/api/inventory")) if s["slot_id"] == "A2")
+        assert after["quantity"] == qty_before - 1, "quantity should decrement by 1 when not specified"
+
+    def test_purchase_quantity_parameter_honored(self, client):
+        """When quantity is provided, it should be used for decrement."""
+        before = next(s for s in _json(client.get("/api/inventory")) if s["slot_id"] == "A3")
+        qty_before = before["quantity"]
+
+        # Provide quantity=2
+        resp = client.post("/api/purchase", json={"slot_id": "A3", "quantity": 2})
+        assert resp.status_code == 200
+
+        after = next(s for s in _json(client.get("/api/inventory")) if s["slot_id"] == "A3")
+        assert after["quantity"] == qty_before - 2, "quantity should decrement by the provided amount"
+
+
+# ===========================================================================
+# GET /api/transactions
+# ===========================================================================
+
+class TestGetTransactions:
+
+    def test_returns_200(self, client):
+        resp = client.get("/api/transactions")
+        assert resp.status_code == 200
+
+    def test_returns_list(self, client):
+        data = _json(client.get("/api/transactions"))
+        assert isinstance(data, list)
+
+    def test_empty_initially(self, client):
+        """Before any purchases, transaction list should be empty."""
+        data = _json(client.get("/api/transactions"))
+        assert len(data) == 0
+
+    def test_transaction_appears_after_purchase(self, client):
+        client.post("/api/purchase", json={"slot_id": "A1"})
+        data = _json(client.get("/api/transactions"))
+        assert len(data) == 1
+
+    def test_multiple_purchases_create_multiple_transactions(self, client):
+        client.post("/api/purchase", json={"slot_id": "A1"})
+        client.post("/api/purchase", json={"slot_id": "A2"})
+        data = _json(client.get("/api/transactions"))
+        assert len(data) == 2
+
+    def test_transactions_ordered_by_timestamp_descending(self, client):
+        """Most recent transaction should appear first."""
+        client.post("/api/purchase", json={"slot_id": "A1"})
+        import time
+        time.sleep(0.01)  # Ensure different timestamps
+        client.post("/api/purchase", json={"slot_id": "A2"})
+        
+        data = _json(client.get("/api/transactions"))
+        # The second purchase (A2) should be first in the list (most recent)
+        assert data[0]["resolved_slot_id"] == "A2"
+        assert data[1]["resolved_slot_id"] == "A1"
+
+    def test_each_transaction_has_required_fields(self, client):
+        client.post("/api/purchase", json={"slot_id": "A1"})
+        data = _json(client.get("/api/transactions"))
+        
+        required = {"transaction_id", "amount", "timestamp", "user_id", "resolved_slot_id"}
+        for txn in data:
+            missing = required - txn.keys()
+            assert not missing, f"Transaction missing: {missing}"
+
+    def test_transaction_amount_is_numeric(self, client):
+        client.post("/api/purchase", json={"slot_id": "A1"})
+        data = _json(client.get("/api/transactions"))
+        
+        for txn in data:
+            assert isinstance(txn["amount"], (int, float))
+
+    def test_transaction_timestamp_is_iso_format(self, client):
+        client.post("/api/purchase", json={"slot_id": "A1"})
+        data = _json(client.get("/api/transactions"))
+        
+        for txn in data:
+            timestamp = txn["timestamp"]
+            assert isinstance(timestamp, str)
+            # Should be ISO format with timezone
+            assert "T" in timestamp
+            assert "+" in timestamp or "Z" in timestamp

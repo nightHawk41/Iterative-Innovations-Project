@@ -57,3 +57,14 @@ def test_full_csv_to_database_pipeline(app):
         
         # Soda should be exactly 4 (it processed correctly after the Chips failed)
         assert final_slot_b.quantity == 4
+
+def test_parse_timestamp_ampm():
+    raw = "3/25/2026 11:42:19 PM"
+    dt = TransactionProcessor._parse_timestamp(raw)
+    assert dt.year == 2026
+    assert dt.month == 3
+    assert dt.day == 25
+    assert dt.hour == 23
+    assert dt.minute == 42
+    assert dt.second == 19
+    assert dt.tzinfo is not None

@@ -183,11 +183,16 @@ class TransactionProcessor:
     @staticmethod
     def _parse_timestamp(raw: str) -> datetime:
         """
-        Parse CBORD date strings.  The mock CSV uses M/D/YYYY format.
+        Parse CBORD date strings.
         Falls back to a UTC-aware now() if parsing fails so the row is
         not thrown away over a date formatting quirk.
         """
-        for fmt in ("%m/%d/%Y", "%Y-%m-%d", "%m/%d/%Y %H:%M:%S"):
+        for fmt in (
+            "%m/%d/%Y %I:%M:%S %p",  # ADD: 12-hour time with AM/PM
+            "%m/%d/%Y %H:%M:%S",
+            "%m/%d/%Y",
+            "%Y-%m-%d",
+        ):
             try:
                 naive = datetime.strptime(raw, fmt)
                 return naive.replace(tzinfo=timezone.utc)
@@ -198,6 +203,7 @@ class TransactionProcessor:
             "[TransactionProcessor] Could not parse date '%s'; using UTC now.", raw
         )
         return datetime.now(timezone.utc)
+
 
     @staticmethod
     def _validate_headers(fieldnames: list, path: str) -> None:

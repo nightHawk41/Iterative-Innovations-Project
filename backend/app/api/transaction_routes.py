@@ -99,3 +99,43 @@ def process_transactions():
 
     except Exception as exc:
         return jsonify({"error": str(exc), "status": 500}), 500
+
+
+# ---------------------------------------------------------------------------
+# GET /api/transactions
+# ---------------------------------------------------------------------------
+
+@transaction_bp.route("/api/transactions", methods=["GET"])
+def get_transactions():
+    """
+    Returns all Transaction rows ordered by timestamp descending.
+
+    Each transaction includes:
+        transaction_id, amount, timestamp, user_id, resolved_slot_id
+
+    Response (200):
+        [
+            {
+                "transaction_id": 1001,
+                "amount": 2.50,
+                "timestamp": "2026-04-23T10:30:00+00:00",
+                "user_id": "Jane Doe",
+                "resolved_slot_id": "A1"
+            },
+            ...
+        ]
+    """
+    try:
+        from app.models.transaction import Transaction
+        
+        # Fetch all transactions ordered by timestamp descending
+        transactions = Transaction.query.order_by(
+            Transaction.timestamp.desc()
+        ).all()
+        
+        # Serialize to dict list
+        result = [txn.to_dict() for txn in transactions]
+        return jsonify(result), 200
+        
+    except Exception as exc:
+        return jsonify({"error": str(exc), "status": 500}), 500

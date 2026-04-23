@@ -1,160 +1,236 @@
-------------------------------------------------------------
-Updated Sprint3 tasks
-------------------------------------------------------------
+Converting the Iterative Innovations' current codebase to look and act like a vending1.html
 
-Sprint 3 Goal:
-Revamp the frontend to match the vending1.html prototype: a persistent 6x4 machine
-grid, sidebar with Dashboard/Admin tab switching, a slot purchase flow, admin panel
-enhancements, and the new backend endpoints that support them.
+Task Completion In Order:
+B-08 → B-02 → B-01 → B-03 → B-05 → B-04 → B-06 → B-07 → B-09 → B-10 → B-11 → B-12 → B-13 → B-14 → B-15 through B-21
+-------------------------------------------------
+Phase 1 — Expose What the Frontend Needs
+----------------------------------------------------
+B-08: Fix timestamp parsing for AM/PM format
+_parse_timestamp() currently tries %m/%d/%Y %H:%M:%S (24-hour) but transaction_stream.txt uses %m/%d/%Y %I:%M:%S %p (12-hour AM/PM). Add this format to the list of patterns tried:
+pythonfor fmt in (
+    "%m/%d/%Y %I:%M:%S %p",   # ADD THIS — matches transaction_stream.txt
+    "%m/%d/%Y %H:%M:%S",
+    "%m/%d/%Y",
+    "%Y-%m-%d",
+):
+B-02: Add slot_id label format validation
+vending.html uses labels like A0, A1, A2, A3 (0-indexed columns). The current inventory_config.csv uses A1–A4 (1-indexed). Decide on one convention and apply it consistently to the seed file, the config CSV, and the frontend slot label generator (slotLabel(i)). The decision is to use A1–A4 (1-indexed). 
 
-Already Completed (no action needed):
-  - Routing defaults: wildcard route redirects to /dashboard (App.js)
-  - Dashboard stats header: Total Slots, Healthy, Low/Expiring, Critical (DashboardPage.js)
-  - Transaction CSV file picker and POST /api/transactions/process call (TransactionUpload.js)
+B-01: Add GET /api/inventory endpoint response alignment
+The frontend reads slot_id, item_name, price, quantity, days_until_expiry, and status_color. Verify to_dict() on ItemSlot returns all of these with matching key names. Currently, days_until_expiry is returned, but vending.html uses days_until_expiration — standardize one name across the backend and frontend. The decision is to use days_until_expiry.
 
-Implementation Order Note:
-Backend tasks should be completed before the frontend tasks that depend on them.
-Frontend tasks marked with [DEPENDS ON ...] must wait for the referenced backend task.
-Resolve the architecture decision in Task A-1 before beginning any Phase 1 frontend work.
+B-03: Add GET /api/inventory/summary endpoint
+The Dashboard tab shows the counts for Total Slots, Healthy, Low/Expiring, and Critical/Out. Currently, these are computed in JavaScript. Add a backend endpoint that returns these four counts so the frontend can fetch live data instead of computing from the full inventory list.
+---------------------------------------------------------------
+Phase 2 — Purchase Flow (Single-Item Grid Purchase)
+----------------------------------------------------------------
+B-05: Add CBORD transaction log builder utility
+Extract the random patron data generation from the purchase flow into a reusable utility function. This mirrors logTransaction() in vending.html and should generate:
+A random Primary Key (auto-incrementing patron ID)
+A random Patron Name from a predefined list
+A random SV&C Plan (35 RETRIEVER, 45 DEPT., 40 COMMUTER)
+A random Period (Breakfast, Lunch, Afternoon, Dinner, Evening)
+Current timestamp as Transaction Date
+Location hardcoded to 1499 Lib_Sup
+Tran Amt set to the slot's price
+Stat hardcoded to C
 
-------------------------------------------------------------
-ARCHITECTURE DECISION
-------------------------------------------------------------
+B-04: Add POST /api/purchase endpoint
+vending.html allows users to click a slot and confirm a purchase. Currently there is no endpoint for a single ad-hoc purchase outside of CSV processing. This endpoint should:
+Accept { "slot_id": "A1" } in the request body
+Look up the slot by slot_id
+Verify stock > 0 and item is not expired
+Decrement stock by 1
+Generate and persist a CBORD-style Transaction record with randomized patron data (matching the logTransaction() behavior in vending.html)
+Return the updated slot dict
+Return 409 if out of stock (D-2 safeguard)
+Return 400 if slot is expired or does not exist
 
-[TASK A-1] Migrate the app shell to the prototype's persistent two-column layout.
-  Decision: adopt the prototype layout -- sidebar with Dashboard/Admin tab switching,
-  machine grid always visible on the right, no page-level navigation.
+B-06: Add GET /api/transactions endpoint
+The Generate Sales Report button needs access to all logged transactions — both from grid purchases and from uploaded CSVs. Add an endpoint that returns all Transaction rows, ordered by timestamp descending, serialized to dict.
+------------------------------------------------
+Phase 3 — Transaction CSV Upload
+------------------------------------------------
+B-07: Verify POST /api/transactions/process handles the mock CBORD format
+The existing endpoint accepts a CSV file upload and processes it through TransactionProcessor. Verify that the mock CSV format from transaction_stream.txt (with columns Transaction Date, Location, SV&C Plan, Primary Key, Patron Name, Tran Amt, Amt Remain, Tax, Period, Stat) parses correctly end-to-end. The _parse_timestamp() method needs to handle the M/D/YYYY H:MM:SS AM/PM format present in transaction_stream.txt.
+---------------------------------------------
+Phase 4 — Sales Report Generation
+---------------------------------------------
+B-10: Add GET /api/reports/sales endpoint
+The Generate Sales Report button currently calls openSalesReport() using in-memory data. Move report aggregation to the backend. This endpoint should:
+Read all Transaction rows from the database that have a non-null resolved_slot_id
+Join against ItemSlot to get item_name
+Aggregate by item: units sold, total revenue, average price
+Return sorted by total revenue descending
+Include summary fields: total_revenue, total_units, unique_items, date_range, generated_at, top_item
 
-  Required changes to the existing codebase:
-    - App.js: remove React Router (<Routes>, <Route>, <Navigate>). Replace with a
-      two-column shell: left sidebar (fixed width) + right machine panel (flex: 1).
-      A single tab state value ("dashboard" | "admin") controls which sidebar content
-      is visible; the machine grid renders unconditionally in the right panel.
-    - Sidebar.js: remove NavLink-based navigation. Replace with two tab buttons
-      (Dashboard / Admin) that toggle the sidebar content via the tab state.
-    - DashboardPage.js: dissolve this page component. Move its stats header and
-      AlertsBanner into the Dashboard tab content area of the sidebar.
-    - AdminPage.js: dissolve this page component. Move its admin controls
-      (restock, CSV uploads, sales report) into the Admin tab content area.
-      The InventoryGrid inside AdminPage is removed; the grid is now the shared
-      right panel and does not belong to either tab.
-    - Remove react-router-dom from the project if no other code uses it after
-      the migration, and remove the corresponding import in index.js.
+B-11: Add report availability guard
+The Generate Sales Report button should only be enabled when at least one transaction exists. Add a field to the GET /api/reports/sales response (or a separate GET /api/transactions/count endpoint) so the frontend can check whether any transactions are logged before enabling the button.
+--------------------------------------------
+Phase 5 — Inventory CSV Upload
+--------------------------------------------
+B-12: Add POST /api/inventory/upload endpoint
+vending.html has an Upload New Inventory CSV panel that updates item names, prices, and optionally stock and expiration. This maps to the existing POST /api/admin/sync-inventory-config endpoint, but that endpoint reads from a file path on disk rather than accepting a file upload. Modify it (or add a new endpoint) to accept a multipart file upload with the inventory_config.csv column structure (ROW, Product, Vending Price, optional stock, optional expiration_date).
+B-13: Handle optional stock and expiration_date columns in seed
+The current seed_database() function ignores stock and expiration_date from the CSV and uses COLUMN_TEST_PROFILE instead. Update _parse_inventory_config() and seed_database() to read and apply stock and expiration_date if those columns are present, preserving existing values if they are absent — matching the behavior implemented in parseInventoryCSV() and applyInventoryUpdate() in vending.html.
+-------------------------------------
+Phase 6 — Manual Restock
+-------------------------------------
+B-14: Verify POST /api/restock matches frontend validation rules
+vending.html enforces that quantity cannot exceed 10 - current_stock. The backend restock() method on ItemSlot already enforces this with a ValueError. Verify the error message returned to the frontend is human-readable and includes the maximum allowed quantity so the frontend can display it inline.
 
 
+------------------------------------
+Frontend Tasks (F-01 through F-36)
+------------------------------------
 
-------------------------------------------
-FRONTEND: Phase 1 -- Vending Machine Grid
-------------------------------------------
-[TASK F-1] Replace the Accordion layout in InventoryGrid.js with a static 6x4 CSS grid.
-	The grid must span rows A-F and columns 1-4, producing exactly 24 slot cells.
-	Ensure column indexing is 1-based (columns 1-4) so slots are labeled A1, A2... instead of A0.
-	Remove the existing Accordion, groupByRow logic, Expand All / Collapse All buttons,
-	and the react-bootstrap Accordion import.
-	Render all 24 SlotCard components directly in the grid without any row grouping.
+F-29 → F-30 → F-01 → F-02 → F-10 → F-06 → F-07 → F-08 → F-09 → F-03 → F-04 → F-05 → F-11 → F-12 → F-13 → F-14 → F-15 → F-16 → F-17 → F-27 → F-28 → F-18 → F-19 → F-20 → F-21 → F-22 → F-23 → F-24 → F-25 → F-26 → F-31 → F-32 → F-33 → F-34 → F-35 → F-36
 
-[TASK F-2] Update SlotCard to match the vending machine slot display.
-	Each slot must show: position label (e.g., "A1"), product name, price, stock count,
-	and expiration countdown ("Exp: Nd" or "⚠ Expired" if days_until_expiry <= 0).
-	Note: Apply the "strict rule" where 0 days remaining evaluates as Expired.
-	Remove the existing StatusIndicator badge and left-border color styling.
-	Apply background color directly to the slot cell based on status (see Task F-3).
 
-[TASK F-3] Implement status color and disabled-state logic in SlotCard.
-	Color rules (applied as the slot's background color):
-	- Gray   (#aaa, disabled):        stock === 0 OR days_until_expiry <= 0 (strict expiration rule)
-	- Red    (#e53935 / white text):  stock <= 2 OR days_until_expiry <= 2
-	- Yellow (#f5c518 / dark text):   stock <= 5 OR days_until_expiry <= 5
-	- Green  (#5db85d / white text):  stock > 5 AND days_until_expiry > 5
-	Confirm whether the backend's status_color field already matches these exact thresholds.
-	If thresholds differ, decide whether to use the backend value or recalculate on the frontend.
-	Disabled slots must not respond to clicks and must render at reduced opacity.
+F-29: Apply vending.html color palette via CSS variables
+Define the following CSS variables globally and apply them consistently across all components:
+css--gold: #f0a500;
+--black: #1a1a1a;
+--panel-bg: #e8e8e8;
+--sidebar-bg: #d4d4d4;
+--border: #999;
+--green: #4caf50;
+--yellow: #f5c518;
+--red: #e53935;
+--header-bg: #c8c8c8;
+--blue-panel: #cfe2f3;
 
-[TASK F-4] Make non-disabled slots interactive: clicking opens a purchase confirmation modal.
-	The modal must display the item name, slot position (e.g., "A1"), and price.
-	Modal prompt format: "Purchase [item name] (Slot [position]) for $[price]?"
-	Use a React modal overlay (not window.confirm()) with Confirm and Cancel buttons.
-	Purchase interaction is only active when the Dashboard tab is selected.
-	When the Admin tab is active, all slots must be non-clickable (pointer-events: none
-	or equivalent) even if they are not otherwise disabled.
-	[DEPENDS ON B-1]
+F-30: Apply IBM Plex fonts
+Add the IBM Plex Sans and IBM Plex Mono fonts from Google Fonts. Use IBM Plex Sans as the base body font and IBM Plex Mono for slot IDs, prices, stat card values, and monospace elements throughout the interface.
 
-[TASK F-5] Implement purchase confirmation logic wired to the backend.
-	On confirm: send POST /api/purchase with { "slot_id": "<id>", "quantity": 1 }.
-	On success: decrement the displayed stock for that slot, re-render the grid, and show a success toast.
-	On failure (e.g., out of stock): close the modal and show an error toast.
-	On cancel: close the modal without any changes.
-	This flow must never be reachable from the Admin tab (enforced by Task F-4).
-	[DEPENDS ON B-1]
+--------------------------------
+Phase 1 — Layout & Navigation
+--------------------------------
+F-01: Implement two-panel layout
+Replace the current page layout with a fixed two-panel structure matching vending.html. The left sidebar should be 280px fixed width and the right panel should be fluid. Use CSS Grid with grid-template-columns: 280px 1fr. The full-width header containing the UMBC logo and system title should persist across all views.
+F-02: Implement sidebar tab navigation
+Add two tabs to the sidebar — Dashboard and Admin Panel — that switch the sidebar content without any page transition or redirect. The active tab should be visually distinguished by a lighter background. This replaces the current React Router navigation between /dashboard and /admin.
+F-03: Implement sidebar Dashboard tab
+The Dashboard tab should display four stat cards: Total Slots, Healthy, Low/Expiring, and Critical/Out. Each card's value should be color-coded — green for Healthy, amber for Low/Expiring, and red for Critical/Out. Stat card values should be fetched from GET /api/inventory and computed on the frontend, or from GET /api/inventory/summary once that endpoint exists (B-03).
+F-04: Implement sidebar Admin Panel tab
+The Admin Panel tab should display three collapsible accordion panels — Manual Restock, Upload Transaction CSV, and Upload New Inventory CSV — and a standalone Generate Sales Report button below them. Each accordion panel header should display a toggle arrow indicator (▸ collapsed, ▾ expanded) that toggles on click.
+F-05: Implement sidebar footer
+Add a persistent footer at the bottom of the sidebar containing a Reload button and a Help button. Reload should re-fetch inventory from the API and re-render the machine grid. Help should display a brief toast or tooltip explaining slot color meanings.
 
-------------------------------------------
-FRONTEND: Phase 2 -- Dashboard & Navigation
-------------------------------------------
-[TASK F-6] Add Reload and Help global control buttons to the UI sidebar footer.
-	Reload behavior — implement Option A to match the prototype's smooth re-rendering:
-	Option A (re-fetch only): re-call GET /api/inventory and refresh the grid and dashboard stats.
-	No confirmation prompt or backend reset needed.
-	Help button: show a toast or info modal with brief usage instructions
-	(e.g., "Hover slots to see details, click to purchase.").
+--------------------------------
+Phase 2 — Vending Machine Grid
+--------------------------------
+F-06: Replace InventoryGrid accordion layout with flat machine grid
+The current InventoryGrid component groups slots into accordion rows (Row A, Row B, etc.). Replace this with a flat CSS Grid layout using grid-template-columns: repeat(4, 1fr) that renders all 24 slots directly, matching the vending.html machine grid layout.
+F-07: Redesign SlotCard component to match vending.html slot tiles
+The current SlotCard component uses a card-style layout with a left border. Replace it with the flat slot tile design from vending.html, displaying slot ID, item name, price, stock count, and days until expiration stacked vertically. The entire tile background should be colored based on status — green, yellow, red, or gray — rather than using a colored left border.
+F-08: Implement slot color logic matching vending.html thresholds
+Apply the following color rules to each slot tile background:
 
-----------------------------------------------
-FRONTEND: Phase 3 -- Admin Panel Enhancements
-----------------------------------------------
-[TASK F-7] Refine the Manual Restock Form in RestockModal.js (or new sidebar panel).
-	Move the restock form into the collapsible Admin sidebar panel.
-	The file picker, field validation, and cancel/clear behavior are already implemented.
-	Add: field validation to ensure the quantity does not exceed maximum slot capacity (10).
-	Add: display a success toast notification after a successful restock submission,
-	replacing or supplementing the current inline feedback message.
+Gray/disabled: days_until_expiry < 0 OR quantity === 0
+Red: quantity <= 2 OR days_until_expiry <= 2
+Yellow: quantity <= 5 OR days_until_expiry <= 5
+Green: otherwise
 
-[TASK F-8] Update Transaction CSV upload to track state for Sales Reports.
-	The file picker, .csv validation, and POST /api/transactions/process call already exist.
-	Replace the current inline result panel with a success toast upon upload.
-	Ensure that uploading a transaction CSV enables the "Generate Sales Report" button (see F-10).
-	Keep the existing inline error display for failure cases.
+This replaces the current status_color field from the backend, which uses different threshold names. Confirm thresholds match between frontend logic and backend is_critical() / is_warning() methods.
+F-09: Implement slot hover and click behavior
+Active slots (non-gray) should scale slightly on hover using a CSS transition matching vending.html's transform: scale(1.03) and filter: brightness(0.9). Gray slots should show cursor: not-allowed and must not be clickable. Clicking an active slot should open the purchase confirmation modal.
+F-10: Implement machine panel header
+Add a centered header bar above the machine grid that reads "UMBC Vending Machine", styled with the same header-bg background color used in vending.html.
 
-[TASK F-9] Implement the "Upload New Inventory" panel in the Admin view.
-	Add a new collapsible panel styled consistently with the existing TransactionUpload section.
-	Include: a file picker that restricts to .csv files and an "Upload & Process" button.
-	On submit: POST the file to POST /api/inventory/upload.
-	On success: show a success toast, enable the "Update Inventory" button, and refresh the inventory grid upon clicking Update.
-	On failure: display an inline error message below the picker.
-	[DEPENDS ON B-2]
+-------------------------------------
+Phase 3 — Purchase Confirmation Modal
+-------------------------------------
+F-11: Replace RestockModal with a Purchase Confirmation Modal
+Add a new PurchaseModal component that appears when a user clicks an active slot. It should display the item name, slot ID, and price, and present two buttons: Confirm (primary/dark) and Cancel (secondary/light). This replaces the existing purchase flow in DashboardPage.
+F-12: Wire Confirm button to POST /api/purchase
+When the user clicks Confirm, send a POST /api/purchase request with { "slot_id": "A1" }. On success, close the modal, show a success toast, and re-fetch inventory to update the grid. On failure (409 out of stock, 400 expired), close the modal and show an appropriate error toast.
+F-13: Remove AlertsBanner from DashboardPage
+The vending.html design does not include an alerts banner above the grid. The alert information is surfaced through slot tile colors and the sidebar stat cards instead. Remove the AlertsBanner component from the Dashboard view.
 
-[TASK F-10] Build the Sales Report flow in the Admin view.
-	Add a "Generate Sales Report" button. This button should be disabled until a transaction occurs (via F-5 purchase) or a transaction CSV is uploaded (via F-8).
-	On click: call GET /api/sales-report and trigger a file download or open an HTML window with the aggregated report.
-	On success: show a toast ("Sales report generated.").
-	On failure: show an error toast with the reason.
-	[DEPENDS ON B-3]
+-------------------------------
+Phase 4 — Manual Restock Form
+--------------------------------
+F-14: Move RestockModal into the sidebar accordion panel
+The current RestockModal is a centered popup triggered by a button in the page header. Replace it with an inline form inside the Manual Restock accordion panel in the sidebar, matching vending.html's layout. The form should expand and collapse with the accordion panel rather than appearing as a modal overlay.
+F-15: Implement inline validation matching vending.html
+The restock form should validate all three fields simultaneously on submit and display inline error messages directly beneath each offending field. Specific rules:
+
+Slot ID: required, must be selected from dropdown
+Quantity Added: required, integer only, minimum 1, maximum 10 - current_stock (dynamic per slot)
+Expiration Date: required, must be a valid date
+
+Error messages should clear automatically on successful submission or cancel.
+F-16: Populate Slot ID dropdown from live inventory
+The Slot ID dropdown should be populated from the current inventory state, showing each slot's ID and item name. Each option should also show the current stock level so the user can see the remaining capacity, e.g. A1 — Bic Comfort Pens (Current: 8/10).
+F-17: Wire Restock button to POST /api/restock
+On successful form validation, send POST /api/restock with { slot_id, quantity_added, expiration_date }. On success, show a success toast, clear the form, collapse the accordion panel, and re-fetch inventory to update the grid and stat cards.
 
 ---------------------------------
-BACKEND: Phase 4 -- New Endpoints
----------------------------------
-[TASK B-1] Implement POST /api/purchase (api/inventory_routes.py).
-	Request body (JSON): { "slot_id": "A1", "quantity": 1 }.
-	Behavior: look up the slot, confirm stock > 0 and days_until_expiry > 0, decrement by quantity, persist, and return updated slot. Note: This endpoint should also generate and append a transaction record to the database for sales reporting.
-	On success (200): return updated slot dict + { "message": "Purchase successful" }.
-	On out-of-stock, expired, or concurrent write conflict (409): return a ConcurrencyError-style response
-	consistent with the existing D-2 pattern used in restock and transaction routes.
-	On unknown slot_id (400): return a descriptive error message.
-	This endpoint is a hard dependency for frontend Tasks F-4 and F-5.
+Phase 5 — Upload Transaction CSV
+----------------------------------
+F-18: Redesign Upload Transaction CSV panel
+Replace the current TransactionUpload component with the accordion panel design from vending.html. The panel body should contain a hint showing the expected CSV format, a file browser input, an Upload & Process button, a Clear button, an inline feedback area, a horizontal divider, and a grayed-out Generate Sales Report button.
+F-19: Implement CSV upload feedback
+After clicking Upload & Process, show an inline feedback message directly below the file input — green with a success count on success, red with an error description on failure. This replaces the current Alert component used in TransactionUpload.
+F-20: Implement Generate Sales Report button state
+The Generate Sales Report button should be disabled and visually grayed out by default. It should become active only after a CSV has been successfully processed (feedback message shows success). Clearing the file input should disable it again.
+F-21: Wire Generate Sales Report to GET /api/reports/sales
+When clicked, fetch GET /api/reports/sales and use the response to open the sales report in a new browser window. The report window HTML should match the design from vending.html's openSalesReport() function, including the sticky top bar with Download CSV and Close buttons, three summary cards, top-selling item callout, and ranked breakdown table.
 
-[TASK B-2] Implement POST /api/inventory/upload (api/inventory_routes.py).
-	Accepts a CSV file upload (multipart/form-data, field name = "file").
-	Expected CSV columns must match the schema of the existing inventory_config.csv.
-	Behavior: parse the uploaded CSV, clear all existing ItemSlot rows, seed with new rows.
-	On success (200): return { "message": "Inventory uploaded", "slot_count": <int> }.
-	On bad file format or parse error (400): return a descriptive error without touching the database.
+-----------------------------------
+Phase 6 — Upload New Inventory CSV
+------------------------------------
+F-22: Redesign Upload New Inventory CSV panel
+Replace the placeholder Upload New Inventory CSV section with the full accordion panel design from vending.html. The panel body should contain a hint showing required and optional columns, a file browser input, an Upload & Process button, a Clear button, an inline feedback area, a horizontal divider, and a grayed-out Update Inventory button.
+F-23: Implement Update Inventory button state
+The Update Inventory button should be disabled by default and become active only after a valid CSV has been successfully parsed. Clearing the input should disable it again.
+F-24: Wire Update Inventory to POST /api/inventory/upload
+When clicked, send the parsed CSV file to POST /api/inventory/upload. On success, show a success toast, reset the panel, and re-fetch inventory to update the machine grid with the new item names and prices.
+---------------------------------------
+Phase 7 — Generate Sales Report Button
+----------------------------------------
+F-25: Move Generate Sales Report button to main Admin Panel
+Per the updated design, the Generate Sales Report button should appear as a standalone button below the three accordion panels in the Admin Panel tab, not inside the Upload Transaction CSV panel. It should span the full sidebar width.
+F-26: Implement Generate Sales Report availability guard
+The button should be disabled until at least one transaction exists in the system — either from a grid purchase or from an uploaded CSV. On page load, fetch GET /api/transactions/count (or check the transaction list length) to set the initial button state. Re-evaluate the state after every purchase and every successful CSV upload.
+-------------------------------
+Phase 8 — Toast Notifications
+--------------------------------
+F-27: Implement toast notification system
+Add a global toast component that appears in the bottom-right corner of the screen. Toasts should appear briefly after user actions — successful restock, successful purchase, successful CSV upload, successful inventory update — and disappear after approximately 3 seconds. The toast should use the dark background with a gold left border matching vending.html's toast style.
+F-28: Replace all Alert components with toasts or inline messages
+Audit the current codebase for uses of Bootstrap Alert components and replace them appropriately — use inline field errors for form validation feedback, use inline CSV feedback for upload results, and use toasts for post-action confirmations.
 
-[TASK B-3] Implement GET /api/sales-report (api/transaction_routes.py).
-	Aggregate data from the database transactions to produce a sales report.
-	Report columns: rank, slot_id, item_name, total_units_sold, total_revenue, avg_price.
-	Return the report as a downloadable CSV file or structured JSON payload to power the new Sales Report window.
-	If no transactions have been processed yet, return 404 with a descriptive message.
+---------------------------
+Phase 9 — Styling & Polish
+----------------------------
+F-29: Apply vending.html color palette via CSS variables
+Define the following CSS variables globally and apply them consistently across all components:
+css--gold: #f0a500;
+--black: #1a1a1a;
+--panel-bg: #e8e8e8;
+--sidebar-bg: #d4d4d4;
+--border: #999;
+--green: #4caf50;
+--yellow: #f5c518;
+--red: #e53935;
+--header-bg: #c8c8c8;
+--blue-panel: #cfe2f3;
+F-30: Apply IBM Plex fonts
+Add the IBM Plex Sans and IBM Plex Mono fonts from Google Fonts. Use IBM Plex Sans as the base body font and IBM Plex Mono for slot IDs, prices, stat card values, and monospace elements throughout the interface.
+F-31: Style primary and secondary buttons consistently
+Primary buttons (Restock, Upload & Process, Confirm, Update Inventory) should use a dark filled style. Secondary buttons (Cancel, Clear) should use a light outlined style. Apply these styles globally so all buttons across all components are consistent.
+F-32: Remove Bootstrap dependency
+vending.html does not use Bootstrap. The current React frontend relies heavily on Bootstrap for layout, buttons, modals, and accordion panels. Once the custom CSS layout and components are implemented in F-01 through F-28, audit and remove Bootstrap imports from App.js and index.js.
 
-[TASK B-4] Implement POST /api/reset (api/inventory_routes.py).  [CONDITIONAL -- see Task F-6]
-  Re-run the seed script to restore the database to its original default state.
-  On success (200): return { "message": "Machine reset to default state" }.
-  Only implement this task if the Reload button in Task F-6 is implemented as Option B
-  (full machine reset). If Option A (re-fetch only) is chosen, this task is not needed.
+
+Phase 10 — Cleanup
+F-33: Remove AdminPage as a separate route
+Once the Admin Panel tab is implemented inside the sidebar (F-04), the separate /admin route and AdminPage component are no longer needed. Remove the route from App.js and delete the AdminPage.js file.
+F-34: Remove DashboardPage as a separate route
+Once the Dashboard tab is implemented inside the sidebar (F-03) and the machine grid is rendered directly in the main panel, the separate /dashboard route and DashboardPage.js are no longer needed. Consolidate everything into a single App.js or MainLayout.js component.
+F-35: Remove unused components
+After completing all phases, audit and remove components that are no longer used: InventoryGrid.js, AlertsBanner.js, StatusIndicator.js, TransactionUpload.js, and the original RestockModal.js.
+F-36: Remove mock inventory data
+Once the frontend is fully wired to the backend API, remove mockInventory.js from src/data/. The fallback to mock data during API failures should be replaced with an appropriate error state in the UI rather than silently serving stale data.

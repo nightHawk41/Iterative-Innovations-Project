@@ -38,6 +38,7 @@ from app.models.item_slot   import ItemSlot
 from app.models.transaction import Transaction
 from app.repositories.item_slot_repository  import ItemSlotRepository
 from app.services.mapping_service import MappingService
+from app.services.cbord_transaction_builder import build_cbord_transaction
 
 
 # ---------------------------------------------------------------------------
@@ -238,20 +239,10 @@ class InventoryService:
             # Decrement stock (raises ValueError if somehow goes negative).
             fresh_slot.decrement_stock(quantity)
 
-            # Record a transaction for sales reporting (B-3).
-            # transaction_id: random 31-bit int avoids autoincrement=False constraint.
-            # txn = Transaction(
-            #     transaction_id=uuid.uuid4().int & 0x7FFFFFFF,
-            #     amount=round(fresh_slot.price * quantity, 2),
-            #     user_id="purchase",
-            #     resolved_slot_id=fresh_slot.slot_id,
-            # )
-            txn = Transaction()
-            txn.transaction_id  = uuid.uuid4().int & 0x7FFFFFFF
-            txn.amount          = round(fresh_slot.price * quantity, 2)
-            txn.user_id         = "purchase"
+            # Record a CBORD-style transaction for sales reporting (B-05, B-04).
+            # Uses the transaction builder to generate randomized patron data.
+            txn = build_cbord_transaction(fresh_slot.price)
             txn.resolved_slot_id = fresh_slot.slot_id
-
 
             db.session.add(fresh_slot)
             db.session.add(txn)
