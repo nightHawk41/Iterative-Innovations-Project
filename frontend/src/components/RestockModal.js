@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Modal, Button, Form, Alert } from "react-bootstrap";
+import { showToast } from "../utils/toast";
 
 function getTodayString() {
   return new Date().toISOString().split("T")[0];
@@ -44,7 +45,7 @@ function validateAll(slotId, quantity, expirationDate, maxQuantity) {
   };
 }
 
-function RestockModal({ show, onHide, slots, onRestockSuccess, onShowToast }) {
+function RestockModal({ show, onHide, slots, onRestockSuccess }) {
   const [slotId, setSlotId]          = useState("");
   const [quantity, setQuantity]      = useState("");
   const [expirationDate, setExpDate] = useState("");
@@ -110,7 +111,7 @@ function RestockModal({ show, onHide, slots, onRestockSuccess, onShowToast }) {
         const successSlotId = slotId;
         handleClose();
         await onRestockSuccess?.();
-        onShowToast?.(`✓ Slot ${successSlotId} restocked successfully.`, "success");
+        showToast(`✓ Slot ${successSlotId} restocked successfully.`);
       }
     } catch (err) {
       setApiError("Network error. Is the backend running?");

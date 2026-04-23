@@ -1,7 +1,12 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import Sidebar from "./Sidebar";
+import { showToast } from "../utils/toast";
+
+jest.mock("../utils/toast", () => ({
+  showToast: jest.fn(),
+}));
 
 jest.mock("./AlertsBanner", () => function AlertsBanner() {
   return <div data-testid="alerts-banner" />;
@@ -36,7 +41,6 @@ describe("Sidebar", () => {
         setActiveTab={jest.fn()}
         slots={[]}
         onInventoryChange={jest.fn()}
-        onShowToast={jest.fn()}
       />
     );
 
@@ -107,7 +111,6 @@ describe("Sidebar", () => {
         setActiveTab={jest.fn()}
         slots={[]}
         onInventoryChange={jest.fn()}
-        onShowToast={jest.fn()}
       />
     );
 
@@ -134,8 +137,6 @@ describe("Sidebar", () => {
   });
 
   it("shows an error toast when report generation API fails", async () => {
-    const onShowToast = jest.fn();
-
     global.fetch
       .mockResolvedValueOnce({
         ok: true,
@@ -156,7 +157,6 @@ describe("Sidebar", () => {
         setActiveTab={jest.fn()}
         slots={[]}
         onInventoryChange={jest.fn()}
-        onShowToast={onShowToast}
       />
     );
 
@@ -174,7 +174,7 @@ describe("Sidebar", () => {
     await userEvent.click(screen.getByRole("button", { name: "Generate Sales Report" }));
 
     await waitFor(() => {
-      expect(onShowToast).toHaveBeenCalledWith("Report failed.", "danger");
+      expect(showToast).toHaveBeenCalledWith("Report failed.");
     });
   });
 
@@ -185,7 +185,6 @@ describe("Sidebar", () => {
         setActiveTab={jest.fn()}
         slots={[]}
         onInventoryChange={jest.fn()}
-        onShowToast={jest.fn()}
       />
     );
 
@@ -202,7 +201,6 @@ describe("Sidebar", () => {
         setActiveTab={jest.fn()}
         slots={[]}
         onInventoryChange={jest.fn()}
-        onShowToast={jest.fn()}
       />
     );
 
@@ -236,7 +234,6 @@ describe("Sidebar", () => {
           { slot_id: "A4", quantity: 7, days_until_expiry: 0, status_color: "green" },
         ]}
         onInventoryChange={jest.fn()}
-        onShowToast={jest.fn()}
       />
     );
 
@@ -255,7 +252,6 @@ describe("Sidebar", () => {
         setActiveTab={jest.fn()}
         slots={[]}
         onInventoryChange={onInventoryChange}
-        onShowToast={jest.fn()}
       />
     );
 
@@ -264,22 +260,18 @@ describe("Sidebar", () => {
   });
 
   it("shows help message toast when Help is clicked", async () => {
-    const onShowToast = jest.fn();
-
     render(
       <Sidebar
         activeTab="dashboard"
         setActiveTab={jest.fn()}
         slots={[]}
         onInventoryChange={jest.fn()}
-        onShowToast={onShowToast}
       />
     );
 
     await userEvent.click(screen.getByRole("button", { name: "Help" }));
-    expect(onShowToast).toHaveBeenCalledWith(
-      "Help: Green = healthy, Yellow = low/expiring, Red = critical/expired.",
-      "success"
+    expect(showToast).toHaveBeenCalledWith(
+      "Help: Green = healthy, Yellow = low/expiring, Red = critical/expired."
     );
   });
 });

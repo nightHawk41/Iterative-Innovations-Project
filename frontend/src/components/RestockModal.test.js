@@ -2,6 +2,11 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import RestockModal from "./RestockModal";
+import { showToast } from "../utils/toast";
+
+jest.mock("../utils/toast", () => ({
+  showToast: jest.fn(),
+}));
 
 const slots = [
   {
@@ -30,7 +35,6 @@ function renderRestockModal(overrides = {}) {
     onHide: jest.fn(),
     slots,
     onRestockSuccess: jest.fn().mockResolvedValue(undefined),
-    onShowToast: jest.fn(),
     ...overrides,
   };
 
@@ -99,7 +103,7 @@ describe("RestockModal", () => {
     await waitFor(() => {
       expect(props.onHide).toHaveBeenCalled();
       expect(props.onRestockSuccess).toHaveBeenCalled();
-      expect(props.onShowToast).toHaveBeenCalledWith("✓ Slot A1 restocked successfully.", "success");
+      expect(showToast).toHaveBeenCalledWith("✓ Slot A1 restocked successfully.");
     });
   });
 

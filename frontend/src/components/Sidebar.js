@@ -1,10 +1,11 @@
 import React from 'react';
 import AdminTab from './AdminTab';
 import DashboardTab from './DashboardTab';
+import { showToast } from '../utils/toast';
 
-function Sidebar({ activeTab, setActiveTab, slots, onInventoryChange, onShowToast }) {
+function Sidebar({ activeTab, setActiveTab, slots, onInventoryChange }) {
   function handleHelpClick() {
-    onShowToast?.('Help: Green = healthy, Yellow = low/expiring, Red = critical/expired.', 'success');
+    showToast('Help: Green = healthy, Yellow = low/expiring, Red = critical/expired.');
   }
 
   return (
@@ -30,7 +31,6 @@ function Sidebar({ activeTab, setActiveTab, slots, onInventoryChange, onShowToas
           <AdminTab
             slots={slots}
             onInventoryChange={onInventoryChange}
-            onShowToast={onShowToast}
           />
         )}
       </div>

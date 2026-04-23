@@ -3,8 +3,9 @@ import InventoryUpload from './InventoryUpload';
 import { generateSalesReport } from './SalesReport';
 import TransactionUpload from './TransactionUpload';
 import RestockModal from './RestockModal';
+import { showToast } from '../utils/toast';
 
-function AdminTab({ slots, onInventoryChange, onShowToast }) {
+function AdminTab({ slots, onInventoryChange }) {
   const [openPanel, setOpenPanel] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [reportReady, setReportReady] = useState(false);
@@ -17,7 +18,7 @@ function AdminTab({ slots, onInventoryChange, onShowToast }) {
   async function handleGenerateSalesReport() {
     setReportLoading(true);
     await generateSalesReport({
-      onError: (message) => onShowToast?.(message, 'danger'),
+      onError: (message) => showToast(message),
     });
     setReportLoading(false);
   }
@@ -47,7 +48,7 @@ function AdminTab({ slots, onInventoryChange, onShowToast }) {
         isOpen={openPanel === 'inv'}
         onToggle={() => togglePanel('inv')}
       >
-        <InventoryUpload onInventoryUpdated={onInventoryChange} onShowToast={onShowToast} />
+        <InventoryUpload onInventoryUpdated={onInventoryChange} />
       </AccordionPanel>
 
       <hr className="panel-divider" />
@@ -65,7 +66,6 @@ function AdminTab({ slots, onInventoryChange, onShowToast }) {
         onHide={() => setShowModal(false)}
         slots={slots}
         onRestockSuccess={onInventoryChange}
-        onShowToast={onShowToast}
       />
     </div>
   );

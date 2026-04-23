@@ -3,6 +3,8 @@ import AppHeader from './components/AppHeader';
 import Sidebar from './components/Sidebar';
 import InventoryGrid from './components/InventoryGrid';
 import PurchaseModal from './components/PurchaseModal';
+import Toast from './components/Toast';
+import { showToast } from './utils/toast';
 import './App.css';
 
 const EMPTY_SUMMARY = {
@@ -48,20 +50,6 @@ function App() {
   const [error, setError]         = useState('');
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [purchaseSubmitting, setPurchaseSubmitting] = useState(false);
-  const [toast, setToast] = useState(null);
-
-  function showToast(message, variant = 'success') {
-    setToast({ message, variant });
-  }
-
-  useEffect(() => {
-    if (!toast) {
-      return undefined;
-    }
-
-    const timeoutId = window.setTimeout(() => setToast(null), 3000);
-    return () => window.clearTimeout(timeoutId);
-  }, [toast]);
 
   function closePurchaseModal() {
     setSelectedSlot(null);
@@ -132,22 +120,22 @@ function App() {
 
       if (response.status === 200) {
         closePurchaseModal();
-        showToast(`✓ ${slotToPurchase.item_name} dispensed!`, 'success');
+        showToast(`✓ ${slotToPurchase.item_name} dispensed!`);
         await fetchInventory();
         return;
       }
 
       closePurchaseModal();
       if (response.status === 409) {
-        showToast('This item is out of stock.', 'danger');
+        showToast('This item is out of stock.');
       } else if (response.status === 400) {
-        showToast('This item is unavailable.', 'danger');
+        showToast('This item is unavailable.');
       } else {
-        showToast('Purchase failed. Please try again.', 'danger');
+        showToast('Purchase failed. Please try again.');
       }
     } catch (err) {
       closePurchaseModal();
-      showToast('Network error. Is the backend running?', 'danger');
+      showToast('Network error. Is the backend running?');
     } finally {
       setPurchaseSubmitting(false);
     }
@@ -166,7 +154,6 @@ function App() {
           slots={slots}
           summary={summary}
           onInventoryChange={fetchInventory}
-          onShowToast={showToast}
         />
 
         <section className="machine-panel">
@@ -186,12 +173,7 @@ function App() {
         onConfirm={handleConfirmPurchase}
         onHide={closePurchaseModal}
       />
-
-      {toast ? (
-        <div className={`app-toast app-toast-${toast.variant}`} role="status" aria-live="polite">
-          {toast.message}
-        </div>
-      ) : null}
+      <Toast />
     </div>
   );
 }

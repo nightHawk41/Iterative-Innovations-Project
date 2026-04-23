@@ -1,6 +1,7 @@
 import React, { useRef, useState } from "react";
+import { showToast } from "../utils/toast";
 
-function InventoryUpload({ onInventoryUpdated, onShowToast }) {
+function InventoryUpload({ onInventoryUpdated }) {
   const inputRef = useRef(null);
   const [file, setFile] = useState(null);
   const [feedback, setFeedback] = useState(null);
@@ -94,7 +95,7 @@ function InventoryUpload({ onInventoryUpdated, onShowToast }) {
         return;
       }
 
-      onShowToast?.("✓ Inventory updated.", "success");
+      showToast("✓ Inventory updated.");
       await onInventoryUpdated?.();
       resetPanel();
     } catch (error) {
