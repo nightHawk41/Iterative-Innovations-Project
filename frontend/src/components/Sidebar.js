@@ -1,18 +1,29 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import AlertsBanner from './AlertsBanner';
+import InventoryUpload from './InventoryUpload';
+import { generateSalesReport } from './SalesReport';
 import TransactionUpload from './TransactionUpload';
 import RestockModal from './RestockModal';
-import mockInventory from '../data/mockInventory';
 
-function Sidebar({ activeTab, setActiveTab, slots, onRestockSuccess }) {
+function Sidebar({ activeTab, setActiveTab, slots, summary, onRestockSuccess, onInventoryRefresh, onShowToast }) {
   // slots and onRestockSuccess are passed down from App.js,
   // which now owns the shared inventory state.
   const [showModal, setShowModal] = useState(false);
+  const [reportReady, setReportReady] = useState(false);
+  const [reportLoading, setReportLoading] = useState(false);
 
-  const total    = slots.length;
-  const critical = slots.filter(s => (s.status_color || '').toLowerCase() === 'red').length;
-  const warning  = slots.filter(s => (s.status_color || '').toLowerCase() === 'yellow').length;
-  const healthy  = slots.filter(s => (s.status_color || '').toLowerCase() === 'green').length;
+  async function handleGenerateSalesReport() {
+    setReportLoading(true);
+    await generateSalesReport({
+      onError: (message) => onShowToast?.(message, 'danger'),
+    });
+    setReportLoading(false);
+  }
+
+  const total = Number(summary?.total_slots ?? slots.length);
+  const healthy = Number(summary?.healthy ?? 0);
+  const warning = Number(summary?.low_expiring ?? 0);
+  const critical = Number(summary?.critical_out ?? 0);
 
   return (
     <aside className="sidebar">
@@ -58,7 +69,15 @@ function Sidebar({ activeTab, setActiveTab, slots, onRestockSuccess }) {
           <button className="btn btn-primary" onClick={() => setShowModal(true)}>
             + Manual Restock
           </button>
-          <TransactionUpload />
+          <TransactionUpload onReportReady={setReportReady} />
+          <InventoryUpload onInventoryUpdated={onInventoryRefresh} onShowToast={onShowToast} />
+          <button
+            className="btn btn-outline-secondary mt-3"
+            disabled={!reportReady || reportLoading}
+            onClick={handleGenerateSalesReport}
+          >
+            {reportLoading ? 'Generating…' : 'Generate Sales Report'}
+          </button>
         </div>
       )}
 
@@ -71,6 +90,7 @@ function Sidebar({ activeTab, setActiveTab, slots, onRestockSuccess }) {
         onHide={() => setShowModal(false)}
         slots={slots}
         onRestockSuccess={onRestockSuccess}
+        onShowToast={onShowToast}
       />
     </aside>
   );

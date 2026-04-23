@@ -44,7 +44,7 @@ function validateAll(slotId, quantity, expirationDate, maxQuantity) {
   };
 }
 
-function RestockModal({ show, onHide, slots, onRestockSuccess }) {
+function RestockModal({ show, onHide, slots, onRestockSuccess, onShowToast }) {
   const [slotId, setSlotId]          = useState("");
   const [quantity, setQuantity]      = useState("");
   const [expirationDate, setExpDate] = useState("");
@@ -101,10 +101,16 @@ function RestockModal({ show, onHide, slots, onRestockSuccess }) {
       });
       const data = await response.json();
       if (!response.ok) {
-        setApiError(data.error ?? "Restock failed. Please try again.");
+        if (response.status === 409) {
+          setApiError("This slot was recently modified. Please try again.");
+        } else {
+          setApiError(data.error ?? "Restock failed. Please try again.");
+        }
       } else {
+        const successSlotId = slotId;
         handleClose();
-        onRestockSuccess();
+        await onRestockSuccess?.();
+        onShowToast?.(`✓ Slot ${successSlotId} restocked successfully.`, "success");
       }
     } catch (err) {
       setApiError("Network error. Is the backend running?");
@@ -134,8 +140,6 @@ function RestockModal({ show, onHide, slots, onRestockSuccess }) {
 
       <Form onSubmit={handleSubmit} noValidate>
         <Modal.Body>
-          {apiError && <Alert variant="danger">{apiError}</Alert>}
-
           {/* Slot ID */}
           <Form.Group className="mb-3" controlId="slotId">
             <Form.Label>Slot ID</Form.Label>
@@ -199,6 +203,11 @@ function RestockModal({ show, onHide, slots, onRestockSuccess }) {
         </Modal.Body>
 
         <Modal.Footer>
+          {apiError && (
+            <Alert variant="danger" className="w-100 mb-2">
+              {apiError}
+            </Alert>
+          )}
           <Button variant="secondary" onClick={handleClose} disabled={submitting}>
             Cancel
           </Button>

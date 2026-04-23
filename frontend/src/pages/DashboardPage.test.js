@@ -52,10 +52,20 @@ describe("DashboardPage", () => {
   });
 
   it("stores and renders the API response array on successful fetch", async () => {
-    global.fetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => [baseSlot],
-    });
+    global.fetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [baseSlot],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          total_slots: 1,
+          healthy: 1,
+          low_expiring: 0,
+          critical_out: 0,
+        }),
+      });
 
     render(<DashboardPage />);
 
@@ -66,6 +76,7 @@ describe("DashboardPage", () => {
     });
 
     expect(global.fetch).toHaveBeenCalledWith("/api/inventory");
+    expect(global.fetch).toHaveBeenCalledWith("/api/inventory/summary");
     expect(screen.getByTestId("slot-name")).toHaveTextContent("Granola Bar");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
@@ -93,11 +104,29 @@ describe("DashboardPage", () => {
         json: async () => [baseSlot],
       })
       .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          total_slots: 1,
+          healthy: 1,
+          low_expiring: 0,
+          critical_out: 0,
+        }),
+      })
+      .mockResolvedValueOnce({
         status: 200,
       })
       .mockResolvedValueOnce({
         ok: true,
         json: async () => [{ ...baseSlot, quantity: 7 }],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          total_slots: 1,
+          healthy: 1,
+          low_expiring: 0,
+          critical_out: 0,
+        }),
       });
 
     render(<DashboardPage />);
@@ -140,6 +169,15 @@ describe("DashboardPage", () => {
         json: async () => [baseSlot],
       })
       .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          total_slots: 1,
+          healthy: 1,
+          low_expiring: 0,
+          critical_out: 0,
+        }),
+      })
+      .mockResolvedValueOnce({
         status: 409,
       });
 
@@ -165,6 +203,15 @@ describe("DashboardPage", () => {
         json: async () => [baseSlot],
       })
       .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          total_slots: 1,
+          healthy: 1,
+          low_expiring: 0,
+          critical_out: 0,
+        }),
+      })
+      .mockResolvedValueOnce({
         status: 400,
       });
 
@@ -188,6 +235,15 @@ describe("DashboardPage", () => {
         ok: true,
         json: async () => [baseSlot],
       })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          total_slots: 1,
+          healthy: 1,
+          low_expiring: 0,
+          critical_out: 0,
+        }),
+      })
       .mockRejectedValueOnce(new Error("network"));
 
     render(<DashboardPage />);
@@ -201,6 +257,44 @@ describe("DashboardPage", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("status")).toHaveTextContent("Network error. Is the backend running?");
+    });
+  });
+
+  it("uses inventory summary endpoint values for stat cards", async () => {
+    global.fetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          { ...baseSlot, status_color: "green" },
+          { ...baseSlot, slot_id: "A2", status_color: "green" },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          total_slots: 2,
+          healthy: 0,
+          low_expiring: 1,
+          critical_out: 1,
+        }),
+      });
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Total Slots")).toBeInTheDocument();
+    });
+
+    const totalLabel = screen.getByText("Total Slots");
+    const healthyLabel = screen.getByText("Healthy");
+    const warningLabel = screen.getByText("Low / Expiring");
+    const criticalLabel = screen.getByText("Critical");
+
+    await waitFor(() => {
+      expect(totalLabel.previousSibling).toHaveTextContent("2");
+      expect(healthyLabel.previousSibling).toHaveTextContent("0");
+      expect(warningLabel.previousSibling).toHaveTextContent("1");
+      expect(criticalLabel.previousSibling).toHaveTextContent("1");
     });
   });
 });

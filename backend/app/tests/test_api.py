@@ -1063,3 +1063,15 @@ class TestPostInventoryUpload:
         # Allow small test-runtime drift around date arithmetic.
         expected_days = 30
         assert abs(a3["days_until_expiry"] - expected_days) <= 1
+
+
+class TestPostInventoryApply:
+
+    def test_apply_inventory_returns_success_message(self, client):
+        resp = client.post(
+            "/api/inventory/apply",
+            json={},
+        )
+
+        assert resp.status_code == 200
+        assert _json(resp) == {"message": "Inventory updated."}

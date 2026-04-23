@@ -1,28 +1,26 @@
 import React, { useState } from "react";
 
-function TransactionUpload() {
+function TransactionUpload({ onReportReady }) {
   const [file, setFile]         = useState(null);
-  const [result, setResult]     = useState(null);
-  const [error, setError]       = useState(null);
+  const [feedback, setFeedback] = useState(null);
   const [uploading, setUploading] = useState(false);
 
   function handleFileChange(e) {
     setFile(e.target.files[0] ?? null);
-    setResult(null);
-    setError(null);
+    setFeedback(null);
   }
 
   async function handleUpload(e) {
     e.preventDefault();
     if (!file) {
-      setError("Please select a CSV file.");
+      setFeedback({ type: "error", message: "Please select a CSV file." });
       return;
     }
     if (!file.name.endsWith(".csv")) {
-      setError("Only .csv files are accepted.");
+      setFeedback({ type: "error", message: "Only .csv files are accepted." });
       return;
     }
-    setError(null);
+    setFeedback(null);
     setUploading(true);
     try {
       const formData = new FormData();
@@ -33,12 +31,23 @@ function TransactionUpload() {
       });
       const data = await response.json();
       if (!response.ok) {
-        setError(data.error ?? "Upload failed. Please try again.");
+        onReportReady?.(false);
+        setFeedback({ type: "error", message: data.error ?? "Upload failed. Please try again." });
       } else {
-        setResult(data);
+        const unresolved = Array.isArray(data.unresolved_amounts) ? data.unresolved_amounts : [];
+        const unresolvedSuffix = unresolved.length > 0
+          ? ` ${unresolved.length} unresolved amount(s): ${unresolved.join(", ")}.`
+          : "";
+
+        setFeedback({
+          type: "success",
+          message: `✓ ${data.processed_count} transaction(s) processed.${unresolvedSuffix}`,
+        });
+        onReportReady?.(true);
       }
     } catch (err) {
-      setError("Network error. Is the backend running?");
+      onReportReady?.(false);
+      setFeedback({ type: "error", message: "Network error. Is the backend running?" });
     } finally {
       setUploading(false);
     }
@@ -54,18 +63,13 @@ function TransactionUpload() {
               className="form-control"
               type="file"
               accept=".csv"
+              aria-label="Transaction CSV file"
               onChange={handleFileChange}
             />
           </div>
-          {error && <div className="alert alert-danger py-2">{error}</div>}
-          {result && (
-            <div className="alert alert-success py-2">
-              Processed <strong>{result.processed_count}</strong> transactions.
-              {result.unresolved_amounts?.length > 0 && (
-                <span className="ms-2 text-warning">
-                  Unresolved amounts: {result.unresolved_amounts.join(", ")}
-                </span>
-              )}
+          {feedback && (
+            <div className={`alert py-2 ${feedback.type === "success" ? "alert-success" : "alert-danger"}`}>
+              {feedback.message}
             </div>
           )}
           <button

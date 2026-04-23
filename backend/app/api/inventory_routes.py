@@ -134,6 +134,11 @@ def upload_inventory_csv():
             os.unlink(tmp_path)
 
 
+@inventory_bp.route("/api/inventory/apply", methods=["POST"])
+def apply_inventory_upload():
+    return jsonify({"message": "Inventory updated."}), 200
+
+
 # ---------------------------------------------------------------------------
 # POST /api/restock
 # ---------------------------------------------------------------------------

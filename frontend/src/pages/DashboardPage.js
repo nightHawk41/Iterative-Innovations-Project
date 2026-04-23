@@ -3,6 +3,41 @@ import InventoryGrid from "../components/InventoryGrid";
 import AlertsBanner from "../components/AlertsBanner";
 import PurchaseModal from "../components/PurchaseModal";
 
+const EMPTY_SUMMARY = {
+	total_slots: 0,
+	healthy: 0,
+	low_expiring: 0,
+	critical_out: 0,
+};
+
+function computeSummaryFromSlots(slots) {
+	let healthy = 0;
+	let lowExpiring = 0;
+	let criticalOut = 0;
+
+	for (const slot of slots) {
+		const quantity = Number(slot.quantity ?? 0);
+		const daysUntilExpiry = Number(slot.days_until_expiry ?? -1);
+
+		if (daysUntilExpiry <= 0 || quantity === 0) {
+			criticalOut += 1;
+		} else if (quantity <= 2 || daysUntilExpiry <= 2) {
+			criticalOut += 1;
+		} else if (quantity <= 5 || daysUntilExpiry <= 5) {
+			lowExpiring += 1;
+		} else {
+			healthy += 1;
+		}
+	}
+
+	return {
+		total_slots: slots.length,
+		healthy,
+		low_expiring: lowExpiring,
+		critical_out: criticalOut,
+	};
+}
+
 function StatCard({ label, value, colorClass }) {
 	return (
 		<div className="col">
@@ -16,6 +51,7 @@ function StatCard({ label, value, colorClass }) {
 
 function DashboardPage() {
 	const [slots, setSlots] = useState([]);
+	const [summary, setSummary] = useState(EMPTY_SUMMARY);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState("");
 	const [selectedSlot, setSelectedSlot] = useState(null);
@@ -49,17 +85,44 @@ function DashboardPage() {
 				}
 
 				const data = await response.json();
+				const slotsData = Array.isArray(data) ? data : [];
 				if (!isMounted) {
 					return;
 				}
 
-				setSlots(Array.isArray(data) ? data : []);
+				setSlots(slotsData);
+
+				try {
+					const summaryResponse = await fetch("/api/inventory/summary");
+					if (!summaryResponse.ok) {
+						throw new Error("Failed to load summary.");
+					}
+
+					const summaryData = await summaryResponse.json();
+					if (!isMounted) {
+						return;
+					}
+
+					setSummary({
+						total_slots: Number(summaryData.total_slots ?? 0),
+						healthy: Number(summaryData.healthy ?? 0),
+						low_expiring: Number(summaryData.low_expiring ?? 0),
+						critical_out: Number(summaryData.critical_out ?? 0),
+					});
+				} catch (summaryErr) {
+					if (!isMounted) {
+						return;
+					}
+
+					setSummary(computeSummaryFromSlots(slotsData));
+				}
 			} catch (err) {
 				if (!isMounted) {
 					return;
 				}
 
 				setSlots([]);
+				setSummary(EMPTY_SUMMARY);
 				setError("Unable to load inventory. Please check that the backend is running.");
 			} finally {
 				if (isMounted) {
@@ -86,9 +149,28 @@ function DashboardPage() {
 			}
 
 			const data = await response.json();
-			setSlots(Array.isArray(data) ? data : []);
+				const slotsData = Array.isArray(data) ? data : [];
+				setSlots(slotsData);
+
+				try {
+					const summaryResponse = await fetch("/api/inventory/summary");
+					if (!summaryResponse.ok) {
+						throw new Error("Failed to load summary.");
+					}
+
+					const summaryData = await summaryResponse.json();
+					setSummary({
+						total_slots: Number(summaryData.total_slots ?? 0),
+						healthy: Number(summaryData.healthy ?? 0),
+						low_expiring: Number(summaryData.low_expiring ?? 0),
+						critical_out: Number(summaryData.critical_out ?? 0),
+					});
+				} catch (summaryErr) {
+					setSummary(computeSummaryFromSlots(slotsData));
+				}
 		} catch (err) {
 			setSlots([]);
+				setSummary(EMPTY_SUMMARY);
 			setError("Unable to load inventory. Please check that the backend is running.");
 		} finally {
 			setLoading(false);
@@ -139,10 +221,10 @@ function DashboardPage() {
 		}
 	}
 
-	const total = slots.length;
-	const critical = slots.filter((slot) => (slot.status_color || "").toLowerCase() === "red").length;
-	const warning = slots.filter((slot) => (slot.status_color || "").toLowerCase() === "yellow").length;
-	const healthy = slots.filter((slot) => (slot.status_color || "").toLowerCase() === "green").length;
+	const total = Number(summary.total_slots ?? slots.length);
+	const healthy = Number(summary.healthy ?? 0);
+	const warning = Number(summary.low_expiring ?? 0);
+	const critical = Number(summary.critical_out ?? 0);
 
 	return (
 		<div>
