@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import AppHeader from './components/AppHeader';
 import Sidebar from './components/Sidebar';
-import InventoryGrid from './components/InventoryGrid';
-import PurchaseModal from './components/PurchaseModal';
+import MachinePanel from './components/MachinePanel';
 import Toast from './components/Toast';
 import { showToast } from './utils/toast';
 import './App.css';
@@ -48,16 +47,6 @@ function App() {
   const [summary, setSummary]     = useState(EMPTY_SUMMARY);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState('');
-  const [selectedSlot, setSelectedSlot] = useState(null);
-  const [purchaseSubmitting, setPurchaseSubmitting] = useState(false);
-
-  function closePurchaseModal() {
-    setSelectedSlot(null);
-  }
-
-  function handleSlotSelect(slot) {
-    setSelectedSlot(slot);
-  }
 
   async function fetchInventorySummary(fallbackSlots = []) {
     try {
@@ -101,13 +90,10 @@ function App() {
     }
   }
 
-  async function handleConfirmPurchase() {
-    if (!selectedSlot) {
+  async function handleSlotPurchase(slotToPurchase) {
+    if (!slotToPurchase) {
       return;
     }
-
-    setPurchaseSubmitting(true);
-    const slotToPurchase = selectedSlot;
 
     try {
       const response = await fetch('/api/purchase', {
@@ -119,13 +105,11 @@ function App() {
       });
 
       if (response.status === 200) {
-        closePurchaseModal();
         showToast(`✓ ${slotToPurchase.item_name} dispensed!`);
         await fetchInventory();
         return;
       }
 
-      closePurchaseModal();
       if (response.status === 409) {
         showToast('This item is out of stock.');
       } else if (response.status === 400) {
@@ -134,10 +118,7 @@ function App() {
         showToast('Purchase failed. Please try again.');
       }
     } catch (err) {
-      closePurchaseModal();
       showToast('Network error. Is the backend running?');
-    } finally {
-      setPurchaseSubmitting(false);
     }
   }
 
@@ -156,23 +137,17 @@ function App() {
           onInventoryChange={fetchInventory}
         />
 
-        <section className="machine-panel">
-          <div className="machine-panel-header">UMBC Vending Machine</div>
-          {error ? <div className="alert alert-danger m-3 mb-0">{error}</div> : null}
-          {loading
-            ? <div style={{ padding: '2rem', textAlign: 'center' }}>Loading…</div>
-            : <InventoryGrid slots={slots} activeTab={activeTab} onSlotSelect={handleSlotSelect} />
-          }
-        </section>
+        {error ? <div className="alert alert-danger m-3 mb-0">{error}</div> : null}
+        {loading
+          ? (
+            <section className="machine-panel">
+              <div className="machine-panel-header">UMBC Vending Machine</div>
+              <div style={{ padding: '2rem', textAlign: 'center' }}>Loading…</div>
+            </section>
+          )
+          : <MachinePanel slots={slots} onPurchaseSuccess={handleSlotPurchase} />
+        }
       </div>
-
-      <PurchaseModal
-        show={Boolean(selectedSlot)}
-        slot={selectedSlot}
-        submitting={purchaseSubmitting}
-        onConfirm={handleConfirmPurchase}
-        onHide={closePurchaseModal}
-      />
       <Toast />
     </div>
   );

@@ -725,7 +725,7 @@ slot: object { slot_id, item_name, quantity, price, days_until_expiry }
 onPurchaseSuccess: function
 Required behavior: Render a single slot tile. Compute the color class from quantity and days_until_expiry using this exact logic:
 jsfunction getColorClass(quantity, days) {
-  if (days < 0 || quantity === 0) return "disabled";
+  if (days <= 0 || quantity === 0) return "disabled";
   if (quantity <= 2 || days <= 2) return "red";
   if (quantity <= 5 || days <= 5) return "yellow";
   return "green";
@@ -736,7 +736,7 @@ jsxfunction SlotTile({ slot, onPurchaseSuccess }) {
   const [showModal, setShowModal] = useState(false);
   const colorClass = getColorClass(slot.quantity, slot.days_until_expiry);
   const isDisabled = colorClass === "disabled";
-  const isExpired = slot.days_until_expiry < 0;
+  const isExpired = slot.days_until_expiry <= 0;
 
   return (
     <>
