@@ -343,9 +343,16 @@ body {
   font-weight: 600;
 }
 
-.stat-card.healthy .stat-value { color: var(--green); }
-.stat-card.warning .stat-value { color: #c8880a; }
-.stat-card.critical .stat-value { color: var(--red); }
+.stat-value.total { color: var(--black); }
+.stat-value.healthy { color: var(--green); }
+.stat-value.warning { color: #c8880a; }
+.stat-value.critical { color: var(--red); }
+
+.sidebar-desc {
+  font-size: 0.8rem;
+  color: #555;
+  padding: 4px 0 10px;
+}
 
 .slot-card {
   border-radius: 8px;

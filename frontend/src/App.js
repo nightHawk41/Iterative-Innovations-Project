@@ -112,7 +112,7 @@ function App() {
               <div style={{ padding: '2rem', textAlign: 'center' }}>Loading…</div>
             </section>
           )
-          : <MachinePanel slots={slots} onPurchaseSuccess={fetchInventory} />
+          : <MachinePanel slots={slots} onPurchaseSuccess={fetchInventory} adminMode={activeTab === 'admin'} />
         }
       </div>
       <Toast />

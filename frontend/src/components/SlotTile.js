@@ -8,7 +8,7 @@ export function getColorClass(quantity, days) {
   return 'green';
 }
 
-function SlotTile({ slot, onPurchaseSuccess }) {
+function SlotTile({ slot, onPurchaseSuccess, adminMode = false }) {
   const [showModal, setShowModal] = useState(false);
 
   const colorClass = getColorClass(slot.quantity, slot.days_until_expiry);
@@ -19,9 +19,10 @@ function SlotTile({ slot, onPurchaseSuccess }) {
     <>
       <div
         className={`slot-tile ${colorClass}`}
-        onClick={isDisabled ? undefined : () => setShowModal(true)}
-        role={isDisabled ? undefined : 'button'}
-        tabIndex={isDisabled ? -1 : 0}
+        onClick={isDisabled || adminMode ? undefined : () => setShowModal(true)}
+        style={{ cursor: isDisabled || adminMode ? 'not-allowed' : 'pointer' }}
+        role={isDisabled || adminMode ? undefined : 'button'}
+        tabIndex={isDisabled || adminMode ? -1 : 0}
       >
         <div className="slot-id">{slot.slot_id}</div>
         <div className="slot-name">{slot.item_name}</div>

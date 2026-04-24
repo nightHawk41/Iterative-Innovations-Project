@@ -1,5 +1,6 @@
 import csv
 import os
+import random
 from datetime import date, datetime, timedelta
 from app import db
 from app.models.item_slot import ItemSlot
@@ -7,27 +8,6 @@ from app.models.item_slot import ItemSlot
 DEFAULT_INVENTORY_CONFIG_PATH = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "data", "inventory_config.csv")
 )
-
-# ---------------------------------------------------------------------------
-# Test quantities and expiry offsets keyed by column number (1–10).
-# This gives a predictable status distribution across every row:
-#   Columns 1–5  → Green  (healthy stock, expiry far out)
-#   Columns 6–7  → Yellow (qty at warning threshold OR expiry within 5 days)
-#   Columns 8–10 → Red    (qty at low threshold OR expiry within 2 days)
-# ---------------------------------------------------------------------------
-
-COLUMN_TEST_PROFILE = {
-    1:  (10, 120),
-    2:  (10, 120),
-    3:  (10, 120),
-    4:  (10, 120),
-    # 5:  (6,   60),
-    # 6:  (5,    4),   # Yellow: qty=warning_threshold AND expiry within 5 days
-    # 7:  (4,    3),   # Yellow: qty<warning_threshold
-    # 8:  (3,    1),   # Red:    qty=low_threshold AND expiry within 2 days
-    # 9:  (2,   -1),   # Red:    qty<low_threshold AND already expired
-    # 10: (1,   -3),   # Red:    qty well below threshold AND already expired
-}
 
 
 def _resolve_config_path(config_path: str | None = None) -> str:
@@ -119,13 +99,6 @@ def _parse_inventory_config(config_path: str | None = None) -> list[dict]:
     return items
 
 
-def _get_column(slot_id: str) -> int:
-    """
-    Extracts the column number from a slot_id like 'A7' -> 7, 'K10' -> 10.
-    """
-    return int(slot_id[1:])
-
-
 def seed_database(config_path: str | None = None, update_existing: bool = False) -> dict:
     """
         Populates the ItemSlot table by reading slot/product/price data from
@@ -134,8 +107,8 @@ def seed_database(config_path: str | None = None, update_existing: bool = False)
         Behavior for quantity/expiration:
             - If CSV row provides optional stock and/or expiration_date, use them.
             - If optional values are absent:
-                    * existing slots keep current values (when update_existing=True)
-                    * new slots use COLUMN_TEST_PROFILE defaults by column position
+                    * new slots get random quantity (0–10) and random expiry offset (-2 to 30 days)
+                    * existing slots get random quantity (0–10) and random expiry offset (-2 to 30 days)
 
     - If update_existing=False, existing slots are skipped.
     - If update_existing=True, existing slots are updated from CSV.
@@ -164,10 +137,6 @@ def seed_database(config_path: str | None = None, update_existing: bool = False)
     for entry in config_rows:
         slot_id = entry["slot_id"]
 
-        col = _get_column(slot_id)
-        default_quantity, expiry_offset = COLUMN_TEST_PROFILE.get(col, (6, 60))
-        default_expiration_date = today + timedelta(days=expiry_offset)
-
         csv_stock = entry.get("stock")
         csv_expiration_date = entry.get("expiration_date")
 
@@ -181,19 +150,29 @@ def seed_database(config_path: str | None = None, update_existing: bool = False)
             existing.price = entry["price"]
             if csv_stock is not None:
                 existing.quantity = csv_stock
+            else:
+                existing.quantity = random.randint(0, 10)
             if csv_expiration_date is not None:
                 existing.expiration_date = csv_expiration_date
+            else:
+                expiry_offset = random.randint(-2, 30)
+                existing.expiration_date = today + timedelta(days=expiry_offset)
             updated += 1
             continue
+
+        quantity = csv_stock if csv_stock is not None else random.randint(0, 10)
+        if csv_expiration_date is not None:
+            expiration_date = csv_expiration_date
+        else:
+            expiry_offset = random.randint(-2, 30)
+            expiration_date = today + timedelta(days=expiry_offset)
 
         new_slot = ItemSlot()
         new_slot.slot_id = slot_id
         new_slot.item_name = entry["item_name"]
         new_slot.price = entry["price"]
-        new_slot.quantity = csv_stock if csv_stock is not None else default_quantity
-        new_slot.expiration_date = (
-            csv_expiration_date if csv_expiration_date is not None else default_expiration_date
-        )
+        new_slot.quantity = quantity
+        new_slot.expiration_date = expiration_date
 
         db.session.add(new_slot)
         added += 1
