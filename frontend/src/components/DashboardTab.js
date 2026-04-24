@@ -27,7 +27,7 @@ function DashboardTab({ slots }) {
   return (
     <div id="sidebar-dashboard">
       <p className="sidebar-desc">Overview and quick stats.</p>
-      <StatCard label="Total Slots" value={slots.length} />
+      <StatCard label="Total Slots" value={slots.length} colorClass="total" />
       <StatCard label="Healthy" value={healthy} colorClass="healthy" />
       <StatCard label="Low / Expiring" value={warning} colorClass="warning" />
       <StatCard label="Critical / Out" value={critical} colorClass="critical" />

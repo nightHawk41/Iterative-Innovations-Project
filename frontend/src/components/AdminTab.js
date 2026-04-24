@@ -2,41 +2,50 @@ import React, { useState } from 'react';
 import InventoryUpload from './InventoryUpload';
 import TransactionUpload from './TransactionUpload';
 import RestockForm from './RestockForm';
+import { generateSalesReport } from '../utils/generateSalesReport';
 
-function AdminTab({ slots, onInventoryChange }) {
-  const [openPanel, setOpenPanel] = useState(null);
-
-  function togglePanel(name) {
-    setOpenPanel((prev) => (prev === name ? null : name));
-  }
+function AdminTab({ slots, onInventoryChange, hasTransactions, onTransactionAdded }) {
+  const [restockOpen, setRestockOpen] = useState(false);
+  const [txnOpen, setTxnOpen] = useState(false);
+  const [invOpen, setInvOpen] = useState(false);
 
   return (
     <div id="sidebar-admin">
       <AccordionPanel
         title="+ Manual Restock"
-        isOpen={openPanel === 'restock'}
-        onToggle={() => togglePanel('restock')}
+        isOpen={restockOpen}
+        onToggle={() => setRestockOpen(prev => !prev)}
       >
         <RestockForm slots={slots} onSuccess={onInventoryChange} />
       </AccordionPanel>
-
+      
       <AccordionPanel
-        title="Upload Transaction CSV"
-        isOpen={openPanel === 'txn'}
-        onToggle={() => togglePanel('txn')}
-      >
-        <TransactionUpload onSuccess={onInventoryChange} />
-      </AccordionPanel>
-
-      <AccordionPanel
-        title="Upload New Inventory CSV"
-        isOpen={openPanel === 'inv'}
-        onToggle={() => togglePanel('inv')}
+        title="Upload New Inventory"
+        isOpen={invOpen}
+        onToggle={() => setInvOpen(prev => !prev)}
       >
         <InventoryUpload onSuccess={onInventoryChange} />
       </AccordionPanel>
 
+      <AccordionPanel
+        title="Upload CBORD Transactions"
+        isOpen={txnOpen}
+        onToggle={() => setTxnOpen(prev => !prev)}
+      >
+        <TransactionUpload onSuccess={onInventoryChange} onUploadSuccess={onTransactionAdded} />
+      </AccordionPanel>
+
+
+
       <hr className="panel-divider" />
+
+      <button
+        className="full-width-btn"
+        onClick={generateSalesReport}
+        disabled={!hasTransactions}
+      >
+        📊 Generate Sales Report
+      </button>
 
     </div>
   );

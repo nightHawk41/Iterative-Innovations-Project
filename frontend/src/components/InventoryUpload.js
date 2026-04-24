@@ -106,11 +106,6 @@ function InventoryUpload({ onSuccess }) {
 
   return (
     <form onSubmit={handleUpload}>
-      <div className="csv-hint">
-        <div><strong>Required:</strong> ROW, Product, Vending Price</div>
-        <div><strong>Optional:</strong> stock (integer 0-10), expiration_date (YYYY-MM-DD)</div>
-      </div>
-
       <div className="mb-3">
         <input
           ref={inputRef}
@@ -154,7 +149,7 @@ function InventoryUpload({ onSuccess }) {
         disabled={!updateEnabled || uploading || applying}
         onClick={handleApply}
       >
-        {applying ? "Updating..." : "Update Inventory"}
+        {applying ? "Updating..." : "🔄 Update Inventory"}
       </button>
     </form>
   );
