@@ -18,6 +18,14 @@ function AdminTab({ slots, onInventoryChange, hasTransactions, onTransactionAdde
       >
         <RestockForm slots={slots} onSuccess={onInventoryChange} />
       </AccordionPanel>
+      
+      <AccordionPanel
+        title="Upload New Inventory"
+        isOpen={invOpen}
+        onToggle={() => setInvOpen(prev => !prev)}
+      >
+        <InventoryUpload onSuccess={onInventoryChange} />
+      </AccordionPanel>
 
       <AccordionPanel
         title="Upload CBORD Transactions"
@@ -27,13 +35,7 @@ function AdminTab({ slots, onInventoryChange, hasTransactions, onTransactionAdde
         <TransactionUpload onSuccess={onInventoryChange} onUploadSuccess={onTransactionAdded} />
       </AccordionPanel>
 
-      <AccordionPanel
-        title="Upload New Inventory"
-        isOpen={invOpen}
-        onToggle={() => setInvOpen(prev => !prev)}
-      >
-        <InventoryUpload onSuccess={onInventoryChange} />
-      </AccordionPanel>
+
 
       <hr className="panel-divider" />
 
