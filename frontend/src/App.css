@@ -173,10 +173,13 @@ body {
 .form-row select,
 .form-row input {
   flex: 1;
+  min-width: 0;
+  max-width: 100%;
   padding: 4px 6px;
   border: 1px solid var(--border);
   font-size: 0.78rem;
   background: white;
+  box-sizing: border-box;
 }
 
 .field-error {
@@ -228,6 +231,7 @@ body {
   background: var(--panel-bg);
   font-size: 0.83rem;
   font-weight: 600;
+  font-family: 'IBM Plex Sans', sans-serif;
   cursor: pointer;
   display: flex;
   align-items: center;

@@ -44,6 +44,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [slots, setSlots]         = useState([]);
   const [summary, setSummary]     = useState(EMPTY_SUMMARY);
+  const [hasTransactions, setHasTransactions] = useState(false);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState('');
 
@@ -102,6 +103,8 @@ function App() {
           slots={slots}
           summary={summary}
           onInventoryChange={fetchInventory}
+          hasTransactions={hasTransactions}
+          onTransactionAdded={() => setHasTransactions(true)}
         />
 
         {error ? <div className="alert alert-danger m-3 mb-0">{error}</div> : null}
@@ -112,7 +115,16 @@ function App() {
               <div style={{ padding: '2rem', textAlign: 'center' }}>Loading…</div>
             </section>
           )
-          : <MachinePanel slots={slots} onPurchaseSuccess={fetchInventory} adminMode={activeTab === 'admin'} />
+          : (
+            <MachinePanel
+              slots={slots}
+              onPurchaseSuccess={async () => {
+                await fetchInventory();
+                setHasTransactions(true);
+              }}
+              adminMode={activeTab === 'admin'}
+            />
+          )
         }
       </div>
       <Toast />

@@ -1,17 +1,13 @@
 import React, { useState } from "react";
-import { generateSalesReport } from "../utils/generateSalesReport";
 
-function TransactionUpload({ onSuccess }) {
+function TransactionUpload({ onSuccess, onUploadSuccess }) {
   const [file, setFile]         = useState(null);
   const [feedback, setFeedback] = useState({ message: "", type: "" });
-  const [reportEnabled, setReportEnabled] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [reportLoading, setReportLoading] = useState(false);
 
   function clearState() {
     setFile(null);
     setFeedback({ message: "", type: "" });
-    setReportEnabled(false);
   }
 
   function handleFileChange(e) {
@@ -40,7 +36,6 @@ function TransactionUpload({ onSuccess }) {
       });
       const data = await response.json();
       if (!response.ok) {
-        setReportEnabled(false);
         setFeedback({ type: "error", message: data.error ?? "Upload failed. Please try again." });
       } else {
         const unresolved = Array.isArray(data.unresolved_amounts) ? data.unresolved_amounts : [];
@@ -52,21 +47,14 @@ function TransactionUpload({ onSuccess }) {
           type: "success",
           message: `✓ ${data.processed_count} transaction(s) processed.${unresolvedSuffix}`,
         });
-        setReportEnabled(true);
         await onSuccess?.();
+        onUploadSuccess?.();
       }
     } catch (err) {
-      setReportEnabled(false);
       setFeedback({ type: "error", message: "Network error. Is the backend running?" });
     } finally {
       setUploading(false);
     }
-  }
-
-  async function handleGenerateSalesReport() {
-    setReportLoading(true);
-    await generateSalesReport();
-    setReportLoading(false);
   }
 
   return (
@@ -85,14 +73,14 @@ function TransactionUpload({ onSuccess }) {
         <button
           type="submit"
           className="btn primary"
-          disabled={uploading || reportLoading}
+          disabled={uploading}
         >
           {uploading ? "Processing…" : "Upload & Process"}
         </button>
         <button
           type="button"
           className="btn"
-          disabled={uploading || reportLoading}
+          disabled={uploading}
           onClick={clearState}
         >
           Clear
@@ -104,17 +92,6 @@ function TransactionUpload({ onSuccess }) {
           {feedback.message}
         </div>
       ) : null}
-
-      <hr className="panel-divider" />
-
-      <button
-        type="button"
-        className="full-width-btn"
-        disabled={!reportEnabled || reportLoading}
-        onClick={handleGenerateSalesReport}
-      >
-        {reportLoading ? "Generating…" : "Generate Sales Report"}
-      </button>
     </form>
   );
 }

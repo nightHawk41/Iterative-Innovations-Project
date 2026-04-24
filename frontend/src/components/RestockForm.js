@@ -50,6 +50,14 @@ function RestockForm({ slots, onSuccess }) {
   );
   const maxQuantity = selectedSlot ? 10 - Number(selectedSlot.quantity ?? 0) : 10;
 
+  function handleCancel() {
+    setSlotId('');
+    setQuantityAdded('');
+    setExpirationDate('');
+    setErrors({ slotId: '', quantityAdded: '', expirationDate: '' });
+    setApiError('');
+  }
+
   async function handleSubmit(event) {
     event.preventDefault();
     setApiError('');
@@ -110,7 +118,7 @@ function RestockForm({ slots, onSuccess }) {
           <option value="">-- Select a slot --</option>
           {slots.map((slot) => (
             <option key={slot.slot_id} value={slot.slot_id}>
-              {slot.slot_id} — {slot.item_name} (Current: {slot.quantity}/10)
+              {slot.slot_id} - {slot.item_name}
             </option>
           ))}
         </select>
@@ -126,6 +134,7 @@ function RestockForm({ slots, onSuccess }) {
           type="number"
           min="1"
           step="1"
+          placeholder="e.g. 5"
           value={quantityAdded}
           onChange={(event) => setQuantityAdded(event.target.value)}
           disabled={submitting}
@@ -156,6 +165,9 @@ function RestockForm({ slots, onSuccess }) {
       <div className="btn-row">
         <button type="submit" className="btn primary" disabled={submitting}>
           {submitting ? 'Submitting…' : 'Restock'}
+        </button>
+        <button type="button" className="btn" onClick={handleCancel} disabled={submitting}>
+          Cancel
         </button>
       </div>
     </form>
