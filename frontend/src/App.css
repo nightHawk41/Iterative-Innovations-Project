@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+/* @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap'); */
 
 :root {
   --gold: #f0a500;
@@ -28,11 +28,25 @@ body {
   min-height: 100vh;
 }
 
-.app-header {
+/* .app-header {
   display: flex;
   align-items: center;
   background: var(--panel-bg);
   border-bottom: 2px solid var(--border);
+  padding: 10px 20px;
+  gap: 20px;
+} */
+
+.app-header {
+  display: flex;
+  align-items: center;
+  /* Adds a 75% opacity black overlay on top of the flag for readability */
+  background: linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.3)), url('./assets/maryland-flag-header-black.jpg');
+  background-size: cover;
+  background-position: center;
+  
+  /* Optional: Change the bottom border to gold to tie into the UMBC theme */
+  border-bottom: 3px solid var(--gold); 
   padding: 10px 20px;
   gap: 20px;
 }
@@ -41,7 +55,7 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
-  border-right: 2px solid var(--border);
+  border-right: 2px solid var(--border); /* You might want to change var(--border) to #555 here if it looks too bright */
   padding-right: 20px;
 }
 
@@ -50,12 +64,21 @@ body {
   width: auto;
 }
 
-.header-title {
+/* .header-title {
+  font-family: 'Montserrat', sans-serif; 
   font-size: 1.2rem;
+  font-weight: 700; 
   color: #333;
   padding-left: 12px;
+} */
+.header-title {
+  font-family: 'Montserrat', sans-serif; 
+  font-size: 1.2rem;
+  font-weight: 700; 
+  color: #ffffff; /* Changed to white for contrast against the dark flag */
+  padding-left: 12px;
+  letter-spacing: 0.5px;
 }
-
 .app-body {
   display: grid;
   grid-template-columns: 280px 1fr;
@@ -69,13 +92,27 @@ body {
   flex-direction: column;
 }
 
-.machine-panel-header {
+/* .machine-panel-header {
   background: var(--header-bg);
   border-bottom: 2px solid var(--border);
   padding: 8px 14px;
   font-size: 1rem;
   font-weight: 600;
   text-align: center;
+
+   font-family: 'Montserrat', sans-serif; 
+  Roboto
+} */
+
+.machine-panel-header {
+  font-family: 'Roboto', sans-serif; 
+  background: var(--header-bg);
+  border-bottom: 2px solid var(--border);
+  padding: 8px 14px;
+  font-size: 1rem;
+  font-weight: 700; 
+  text-align: center;
+  /* letter-spacing: 0.5px;  */
 }
 
 .machine-grid {
@@ -87,6 +124,7 @@ body {
 }
 
 .slot-tile {
+  font-family: 'Inter', sans-serif; /* ADDED */
   border: 2px solid var(--slot-border);
   padding: 8px 6px;
   text-align: center;
@@ -235,11 +273,27 @@ body {
 .full-width-btn:hover:not(:disabled) { background: #d0d0d0; }
 .full-width-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-.sidebar {
+/* .sidebar {
   width: 280px;
   min-height: 100vh;
   flex-shrink: 0;
   background-color: var(--sidebar-bg);
+  border-right: 2px solid var(--border);
+  display: flex;
+  flex-direction: column;
+} */
+
+.sidebar {
+  width: 280px;
+  min-height: 100vh;
+  flex-shrink: 0;
+  
+  /* The Watermark Effect */
+  /* Uses an 85% opaque white layer over the flag so text remains readable */
+  background: linear-gradient(rgba(255, 255, 255, 0.60), rgba(255, 255, 255, 0.60)), url('./assets/maryland-flag-background.jpg');
+  background-size: cover;
+  background-position: center;
+  
   border-right: 2px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -251,12 +305,14 @@ body {
 }
 
 .nav-tab {
+  font-family: 'Roboto', sans-serif; /* ADDED */
   flex: 1;
   padding: 8px 10px;
   font-size: 0.82rem;
   font-weight: 600;
   border: none;
-  background: var(--header-bg);
+  /* background: var(--header-bg); */
+  background: transparent;
   cursor: pointer;
   border-right: 1px solid var(--border);
   transition: background 0.15s;
