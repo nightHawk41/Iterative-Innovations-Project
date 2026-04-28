@@ -9,6 +9,7 @@ that ConcurrencyError (out-of-stock race condition) maps to HTTP 409 Conflict.
 """
 
 import os
+from collections import defaultdict
 from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, request
@@ -192,48 +193,62 @@ def get_sales_report():
         # B-11: availability guard for frontend button state.
         transaction_count = db.session.query(func.count(Transaction.transaction_id)).scalar() or 0
 
-        # Only resolved rows contribute to sales rollups.
-        rows = (
-            db.session.query(
-                ItemSlot.item_name.label("item_name"),
-                func.count(Transaction.transaction_id).label("units_sold"),
-                func.sum(Transaction.amount).label("total_revenue"),
-                func.avg(Transaction.amount).label("average_price"),
-            )
-            .join(ItemSlot, Transaction.resolved_slot_id == ItemSlot.slot_id)
-            .filter(Transaction.resolved_slot_id.isnot(None))
-            .group_by(ItemSlot.item_name)
-            .order_by(func.sum(Transaction.amount).desc(), ItemSlot.item_name.asc())
-            .all()
-        )
+        # Step 1: build a price -> {slot_id, item_name} lookup from current inventory.
+        price_map = {}
+        for slot in db.session.query(ItemSlot).all():
+            price_key = round(float(slot.price), 2)
+            price_map[price_key] = {
+                "slot_id": slot.slot_id,
+                "item_name": slot.item_name,
+            }
+
+        # Step 1: aggregate by resolved (slot_id, item_name) using amount-based lookup.
+        grouped = defaultdict(lambda: {"units_sold": 0, "total_revenue": 0.0})
+        transactions = db.session.query(Transaction).order_by(Transaction.timestamp.asc()).all()
+
+        for transaction in transactions:
+            price_key = round(float(transaction.amount), 2)
+            match = price_map.get(price_key)
+
+            if match:
+                slot_id = match["slot_id"]
+                item_name = match["item_name"]
+            else:
+                slot_id = "Unknown"
+                item_name = f"Unresolved (${price_key:.2f})"
+
+            key = (slot_id, item_name)
+            grouped[key]["units_sold"] += 1
+            grouped[key]["total_revenue"] += float(transaction.amount)
 
         items = []
-        for row in rows:
+        for (slot_id, item_name), aggregate in grouped.items():
+            units_sold = int(aggregate["units_sold"])
+            total_item_revenue = round(float(aggregate["total_revenue"]), 2)
+            avg_price = round(total_item_revenue / units_sold, 2) if units_sold else 0.0
             items.append(
                 {
-                    "item_name": row.item_name,
-                    "units_sold": int(row.units_sold or 0),
-                    "total_revenue": round(float(row.total_revenue or 0.0), 2),
-                    "average_price": round(float(row.average_price or 0.0), 2),
+                    "slot_id": slot_id,
+                    "item_name": item_name,
+                    "units_sold": units_sold,
+                    "total_revenue": total_item_revenue,
+                    "avg_price": avg_price,
+                    # Keep legacy field for compatibility with older clients/tests.
+                    "average_price": avg_price,
                 }
             )
 
-        totals = (
-            db.session.query(
-                func.count(Transaction.transaction_id).label("total_units"),
-                func.sum(Transaction.amount).label("total_revenue"),
-                func.min(Transaction.timestamp).label("start_ts"),
-                func.max(Transaction.timestamp).label("end_ts"),
-            )
-            .filter(Transaction.resolved_slot_id.isnot(None))
-            .one()
-        )
+        items.sort(key=lambda x: (-x["total_revenue"], x["item_name"]))
+        for idx, item in enumerate(items, start=1):
+            item["rank"] = idx
 
-        total_units = int(totals.total_units or 0)
-        total_revenue = round(float(totals.total_revenue or 0.0), 2)
+        unresolved_count = sum(1 for item in items if item["slot_id"] == "Unknown")
 
-        start_ts = totals.start_ts
-        end_ts = totals.end_ts
+        total_units = len(transactions)
+        total_revenue = round(sum(float(tx.amount) for tx in transactions), 2)
+
+        start_ts = transactions[0].timestamp if transactions else None
+        end_ts = transactions[-1].timestamp if transactions else None
         if start_ts and start_ts.tzinfo is None:
             start_ts = start_ts.replace(tzinfo=timezone.utc)
         if end_ts and end_ts.tzinfo is None:
@@ -245,7 +260,21 @@ def get_sales_report():
         }
 
         generated_at = datetime.now(timezone.utc).isoformat()
-        top_item = items[0] if items else None
+        top_item = None
+        ranked_resolved_items = [item for item in items if item["slot_id"] != "Unknown"]
+        if ranked_resolved_items:
+            lead = ranked_resolved_items[0]
+            top_item = {
+                "slot_id": lead["slot_id"],
+                "item_name": lead["item_name"],
+                "units": lead["units_sold"],
+                "revenue": lead["total_revenue"],
+                # Keep legacy fields for compatibility with older clients/tests.
+                "units_sold": lead["units_sold"],
+                "total_revenue": lead["total_revenue"],
+                "avg_price": lead["avg_price"],
+                "average_price": lead["average_price"],
+            }
 
         return jsonify(
             {
@@ -256,6 +285,7 @@ def get_sales_report():
                 "date_range": date_range,
                 "generated_at": generated_at,
                 "top_item": top_item,
+                "unresolved_count": unresolved_count,
                 "transaction_count": int(transaction_count),
                 "has_transactions": bool(transaction_count > 0),
             }

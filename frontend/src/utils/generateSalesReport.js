@@ -50,56 +50,28 @@ function formatDateRange(dateRange) {
   return start || end || "N/A";
 }
 
-function normalizeItems(items) {
-  if (!Array.isArray(items)) {
-    return [];
-  }
-
-  return items.map((item, index) => {
-    const units = Number(item.units_sold ?? item.units ?? 0);
-    const revenue = Number(item.total_revenue ?? item.revenue ?? 0);
-    const avgPriceRaw = item.avg_price ?? item.average_price;
-    const avgPrice = Number(avgPriceRaw ?? (units > 0 ? revenue / units : 0));
-
-    return {
-      rank: Number(item.rank ?? index + 1),
-      slot_id: item.slot_id ?? "—",
-      item_name: item.item_name ?? "Unknown",
-      units_sold: Number.isFinite(units) ? units : 0,
-      total_revenue: Number.isFinite(revenue) ? revenue : 0,
-      avg_price: Number.isFinite(avgPrice) ? avgPrice : 0,
-    };
-  });
-}
-
 function buildSalesReportHtml(data) {
   const generatedAt = data.generated_at
     ? new Date(data.generated_at).toLocaleString("en-US")
     : new Date().toLocaleString("en-US");
 
   const dateRange = formatDateRange(data.date_range);
-  const items = normalizeItems(data.items);
-  const topItem = data.top_item
-    ? {
-        item_name: data.top_item.item_name ?? "Unknown",
-        slot_id: data.top_item.slot_id ?? "—",
-        units: Number(data.top_item.units ?? data.top_item.units_sold ?? 0),
-        revenue: Number(data.top_item.revenue ?? data.top_item.total_revenue ?? 0),
-      }
-    : null;
+  const items = Array.isArray(data.items) ? data.items : [];
+  const topItem = data.top_item || null;
 
   const totalRevenue = Number(data.total_revenue ?? 0);
   const totalUnits = Number(data.total_units ?? 0);
   const uniqueItems = Number(data.unique_items ?? items.length);
+  const unresolvedCount = Number(data.unresolved_count ?? 0);
 
   const tableRows = items
     .map(
       (item) => `
         <tr>
-            <td>${item.rank}</td>
-            <td>${escapeHtml(item.slot_id)}</td>
-            <td>${escapeHtml(item.item_name)}</td>
-            <td>${item.units_sold}</td>
+            <td>${Number(item.rank) || 0}</td>
+            <td>${escapeHtml(item.slot_id ?? "")}</td>
+            <td>${escapeHtml(item.item_name ?? "")}</td>
+            <td>${Number(item.units_sold) || 0}</td>
             <td class="revenue-cell">$${toMoney(item.total_revenue)}</td>
             <td>$${toMoney(item.avg_price)}</td>
         </tr>`
@@ -117,7 +89,7 @@ function buildSalesReportHtml(data) {
         item.rank,
         item.slot_id,
         item.item_name,
-        item.units_sold,
+        Number(item.units_sold) || 0,
         `$${toMoney(item.total_revenue)}`,
         `$${toMoney(item.avg_price)}`,
       ].join(",")
@@ -215,6 +187,15 @@ function buildSalesReportHtml(data) {
     .callout-text .value { font-family: 'IBM Plex Mono', monospace; font-size: 1.05rem; font-weight: 600; margin-top: 2px; }
     .callout-text .sub { font-size: 0.75rem; color: #aaa; margin-top: 2px; }
 
+    .unresolved-warning {
+      background: #fff8e1;
+      border-left: 4px solid #f0a500;
+      padding: 10px 14px;
+      font-size: 0.82rem;
+      color: #555;
+      margin-bottom: 20px;
+    }
+
     .section-title { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
 
     .table-wrap { background: var(--panel); border: 1px solid var(--border); box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 28px; overflow-x: auto; }
@@ -274,13 +255,18 @@ function buildSalesReportHtml(data) {
         </div>
     </div>
 
+      ${unresolvedCount > 0 ? `
+      <div class="unresolved-warning">
+        ⚠ ${unresolvedCount} transaction(s) could not be matched to a current item price and are listed as Unresolved in the table below. This may occur if an item's price was changed after the transaction was recorded.
+      </div>` : ""}
+
     ${topItem ? `
     <div class="callout">
         <div class="callout-icon">🏆</div>
         <div class="callout-text">
             <div class="label">Top Selling Item</div>
-            <div class="value">${escapeHtml(topItem.item_name)} (Slot ${escapeHtml(topItem.slot_id)})</div>
-            <div class="sub">${Number.isFinite(topItem.units) ? topItem.units : 0} units &nbsp;·&nbsp; $${toMoney(topItem.revenue)} revenue</div>
+        <div class="value">${escapeHtml(topItem.item_name ?? "")} (Slot ${escapeHtml(topItem.slot_id ?? "")})</div>
+        <div class="sub">${Number(topItem.units) || 0} units &nbsp;·&nbsp; $${toMoney(topItem.revenue)} revenue</div>
         </div>
     </div>` : ""}
 
