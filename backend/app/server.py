@@ -59,7 +59,12 @@ if __name__ == "__main__":
         db.create_all()
 
         # Optional startup sync from inventory_config.csv.
+        # Reads the AUTO_SYNC_INVENTORY_CONFIG environment variable; defaults to
+        # "1" (enabled) if unset.  Set to "0" in test environments to skip the
+        # CSV seed and avoid overwriting test-specific data.
+        # update_existing=True ensures any price/name changes in the CSV are
+        # applied to slots that already exist in the database.
         if os.getenv("AUTO_SYNC_INVENTORY_CONFIG", "1") == "1":
-            seed_database(update_existing=True)
+            seed_database(update_existing=True) 
 
     app.run(debug=True)
