@@ -972,6 +972,20 @@ class TestGetSalesReport:
         assert data["has_transactions"] is True
 
     def test_step6_end_to_end_purchase_and_upload_verification(self, client):
+        # Re-stock A1 and A2 to known quantities before the test, since the
+        # module-scoped DB may have had stock depleted by earlier purchase tests.
+        restock_csv = (
+            "ROW,Product,Vending Price,stock,expiration_date\n"
+            "A1,Granola Bar,2.15,10,2027-01-01\n"
+            "A2,Trail Mix,2.35,10,2027-01-01\n"
+        ).encode("utf-8")
+        restock_resp = client.post(
+            "/api/inventory/upload",
+            data={"file": (io.BytesIO(restock_csv), "restock_setup.csv")},
+            content_type="multipart/form-data",
+        )
+        assert restock_resp.status_code == 200
+
         # 1-4: Purchase from dashboard equivalent and verify slot mapping in report.
         purchase_resp = client.post("/api/purchase", json={"slot_id": "A1", "quantity": 1})
         assert purchase_resp.status_code == 200
