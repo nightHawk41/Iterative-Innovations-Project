@@ -730,6 +730,7 @@ class TestGetSalesReport:
             "date_range",
             "generated_at",
             "top_item",
+            "unresolved_count",
             "transaction_count",
             "has_transactions",
         }
@@ -744,6 +745,7 @@ class TestGetSalesReport:
         assert data["unique_items"] == 0
         assert data["date_range"] == {"start": None, "end": None}
         assert data["top_item"] is None
+        assert data["unresolved_count"] == 0
         assert data["transaction_count"] == 0
         assert data["has_transactions"] is False
 
@@ -781,15 +783,19 @@ class TestGetSalesReport:
         first = data["items"][0]
         second = data["items"][1]
 
+        assert first["slot_id"] == "A1"
+        assert first["rank"] == 1
         assert first["item_name"] == "Granola Bar"
         assert first["units_sold"] == 2
         assert first["total_revenue"] == 4.3
-        assert first["average_price"] == 2.15
+        assert first["avg_price"] == 2.15
 
+        assert second["slot_id"] == "A2"
+        assert second["rank"] == 2
         assert second["item_name"] == "Trail Mix"
         assert second["units_sold"] == 1
         assert second["total_revenue"] == 2.35
-        assert second["average_price"] == 2.35
+        assert second["avg_price"] == 2.35
 
     def test_items_sorted_by_total_revenue_desc(self, client, app):
         self._insert_transactions(
@@ -819,7 +825,7 @@ class TestGetSalesReport:
         data = _json(client.get("/api/reports/sales"))
         assert data["items"][0]["total_revenue"] >= data["items"][1]["total_revenue"]
 
-    def test_unresolved_transactions_excluded_from_sales_rollup(self, client, app):
+    def test_unresolved_transactions_included_and_counted(self, client, app):
         self._insert_transactions(
             app,
             [
@@ -840,15 +846,48 @@ class TestGetSalesReport:
 
         data = _json(client.get("/api/reports/sales"))
 
-        # Only resolved transactions should contribute to item rollup and totals.
-        assert data["total_units"] == 1
-        assert data["total_revenue"] == 2.15
-        assert data["unique_items"] == 1
-        assert len(data["items"]) == 1
+        # Step 1: unmatched amounts are grouped as Unknown and included.
+        assert data["total_units"] == 2
+        assert data["total_revenue"] == 102.14
+        assert data["unique_items"] == 2
+        assert len(data["items"]) == 2
+
+        unknown = next(item for item in data["items"] if item["item_name"] == "Unresolved ($99.99)")
+        assert unknown["slot_id"] == "Unknown"
+        assert unknown["units_sold"] == 1
+        assert unknown["total_revenue"] == 99.99
+        assert unknown["avg_price"] == 99.99
+        assert data["unresolved_count"] == 1
 
         # Guard fields count all transactions in the system.
         assert data["transaction_count"] == 2
         assert data["has_transactions"] is True
+
+    def test_top_item_excludes_unknown_groups(self, client, app):
+        self._insert_transactions(
+            app,
+            [
+                {
+                    "transaction_id": 9023,
+                    "amount": 99.99,
+                    "timestamp": datetime(2026, 3, 10, 7, 59, 0, tzinfo=timezone.utc),
+                    "resolved_slot_id": None,
+                },
+                {
+                    "transaction_id": 9024,
+                    "amount": 2.15,
+                    "timestamp": datetime(2026, 3, 10, 8, 0, 0, tzinfo=timezone.utc),
+                    "resolved_slot_id": "A1",
+                },
+            ],
+        )
+
+        data = _json(client.get("/api/reports/sales"))
+
+        assert data["unresolved_count"] == 1
+        assert data["top_item"] is not None
+        assert data["top_item"]["slot_id"] != "Unknown"
+        assert data["top_item"]["item_name"] == "Granola Bar"
 
     def test_date_range_and_generated_at_are_iso_strings(self, client, app):
         self._insert_transactions(
@@ -910,9 +949,10 @@ class TestGetSalesReport:
         top_item = data["top_item"]
 
         assert top_item is not None
+        assert top_item["slot_id"] == "A3"
         assert top_item["item_name"] == "Protein Bar"
-        assert top_item["units_sold"] == 2
-        assert top_item["total_revenue"] == 5.1
+        assert top_item["units"] == 2
+        assert top_item["revenue"] == 5.1
 
     def test_guard_fields_true_when_any_transaction_exists(self, client, app):
         self._insert_transactions(
@@ -930,6 +970,58 @@ class TestGetSalesReport:
         data = _json(client.get("/api/reports/sales"))
         assert data["transaction_count"] == 1
         assert data["has_transactions"] is True
+
+    def test_step6_end_to_end_purchase_and_upload_verification(self, client):
+        # 1-4: Purchase from dashboard equivalent and verify slot mapping in report.
+        purchase_resp = client.post("/api/purchase", json={"slot_id": "A1", "quantity": 1})
+        assert purchase_resp.status_code == 200
+
+        report_after_purchase = _json(client.get("/api/reports/sales"))
+        assert report_after_purchase["top_item"] is not None
+        assert report_after_purchase["top_item"]["slot_id"] == "A1"
+        assert any(
+            item["slot_id"] == "A1" and item["item_name"] == "Granola Bar"
+            for item in report_after_purchase["items"]
+        )
+
+        # 5-7: Upload a mock CSV with a known Tran Amt and verify slot resolution.
+        known_csv = (
+            "Transaction Date,Primary Key,Patron Name,Tran Amt\n"
+            "3-10-2026,910001,Known User,2.35\n"
+        )
+        process_known = client.post(
+            "/api/transactions/process",
+            data={"file": (io.BytesIO(known_csv.encode("utf-8")), "known_tx.csv")},
+            content_type="multipart/form-data",
+        )
+        assert process_known.status_code == 200
+
+        report_after_known = _json(client.get("/api/reports/sales"))
+        assert any(
+            item["slot_id"] == "A2" and item["item_name"] == "Trail Mix"
+            for item in report_after_known["items"]
+        )
+
+        # 8-9: Upload unknown Tran Amt and verify unresolved row + warning count.
+        unknown_csv = (
+            "Transaction Date,Primary Key,Patron Name,Tran Amt\n"
+            "3-10-2026,910002,Unknown User,77.77\n"
+        )
+        process_unknown = client.post(
+            "/api/transactions/process",
+            data={"file": (io.BytesIO(unknown_csv.encode("utf-8")), "unknown_tx.csv")},
+            content_type="multipart/form-data",
+        )
+        assert process_unknown.status_code == 200
+
+        final_report = _json(client.get("/api/reports/sales"))
+        assert final_report["unresolved_count"] == 1
+        assert final_report["top_item"] is not None
+        assert final_report["top_item"]["slot_id"] != "Unknown"
+        assert any(
+            item["slot_id"] == "Unknown" and item["item_name"] == "Unresolved ($77.77)"
+            for item in final_report["items"]
+        )
 
 
 # ===========================================================================
