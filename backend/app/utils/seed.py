@@ -150,13 +150,10 @@ def seed_database(config_path: str | None = None, update_existing: bool = False)
             existing.price = entry["price"]
             if csv_stock is not None:
                 existing.quantity = csv_stock
-            else:
-                existing.quantity = random.randint(0, 10)
+            # else: column absent from CSV — preserve existing quantity
             if csv_expiration_date is not None:
                 existing.expiration_date = csv_expiration_date
-            else:
-                expiry_offset = random.randint(-2, 30)
-                existing.expiration_date = today + timedelta(days=expiry_offset)
+            # else: column absent from CSV — preserve existing expiration_date
             updated += 1
             continue
 
