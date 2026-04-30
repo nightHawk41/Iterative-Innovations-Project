@@ -27,11 +27,3 @@ A comprehensive web dashboard that:
 * **Database/Data:** SQLite 
 * **Dev Environment:** Linux/WSL/Windows
 * **Project Management:** JIRA & MS Teams
-
-### Getting Started
-To set up the development environment on your local machine, please follow the detailed instructions here:
-**[Getting Started Guide](docs/Getting_Started.txt)**
-
-### Reference Materials
-* **[Branching Overview](docs/Branching_Overview.txt):** Standards for feature branches and stable releases.
-* **[Git Workflow Guide](docs/Git_Workflow_Guide.txt):** Protocol for Pull Requests and Code Reviews.

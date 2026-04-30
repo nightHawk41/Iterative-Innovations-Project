@@ -64,7 +64,7 @@ if __name__ == "__main__":
         # CSV seed and avoid overwriting test-specific data.
         # update_existing=True ensures any price/name changes in the CSV are
         # applied to slots that already exist in the database.
-        if os.getenv("AUTO_SYNC_INVENTORY_CONFIG", "1") == "1":
+        if os.getenv("AUTO_SEED", "0") == "1":
             seed_database(update_existing=True) 
 
     app.run(debug=True)
