@@ -147,6 +147,7 @@ function buildSalesReportHtml(data) {
     .action-btn.download:hover { background: #d49200; }
     .action-btn.close-btn { background: transparent; color: #ccc; border: 1px solid #555; }
     .action-btn.close-btn:hover { background: #333; color: white; }
+    .action-btn.copy-btn.copied { border-color: #4caf50; color: #4caf50; }
 
     .report-body { max-width: 900px; margin: 36px auto; padding: 0 24px 60px; }
 
@@ -223,7 +224,8 @@ function buildSalesReportHtml(data) {
         <span class="top-bar-title">| Sales Report</span>
     </div>
     <div class="top-bar-actions">
-        <button class="action-btn download" onclick="downloadCSV()">⬇ Download CSV</button>
+        <button class="action-btn download" onclick="downloadCSV()">Download CSV</button>
+        <button class="action-btn copy-btn" id="copy-btn" onclick="copyCSV()">Copy CSV</button>
         <button class="action-btn close-btn" onclick="window.close()">✕ Close</button>
     </div>
 </div>
@@ -306,6 +308,22 @@ function downloadCSV() {
     a.download = "umbc_sales_report.csv";
     a.click();
     URL.revokeObjectURL(url);
+}
+function copyCSV() {
+    const btn = document.getElementById("copy-btn");
+    navigator.clipboard.writeText(csvContent).then(function() {
+        btn.textContent = "✓ Copied!";
+        btn.classList.add("copied");
+        setTimeout(function() {
+            btn.textContent = "Copy CSV";
+            btn.classList.remove("copied");
+        }, 2000);
+    }).catch(function() {
+        btn.textContent = "✗ Failed";
+        setTimeout(function() {
+            btn.textContent = "Copy CSV";
+        }, 2000);
+    });
 }
 ${"<"}/script>
 </body>
