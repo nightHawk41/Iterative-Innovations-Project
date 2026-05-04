@@ -64,6 +64,8 @@ describe("SalesReport", () => {
     expect(html).toContain("downloadCSV()");
     expect(html).toContain("window.close()");
     expect(html).toContain("Total Revenue");
+    expect(html).toContain("copyCSV()");
+    expect(html).toContain("Copy CSV");
     expect(html).not.toContain("transaction(s) could not be matched");
     expect(documentClose).toHaveBeenCalledTimes(1);
 
