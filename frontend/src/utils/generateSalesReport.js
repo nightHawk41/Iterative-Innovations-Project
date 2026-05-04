@@ -309,6 +309,22 @@ function downloadCSV() {
     a.click();
     URL.revokeObjectURL(url);
 }
+function copyCSV() {
+    const btn = document.getElementById("copy-btn");
+    navigator.clipboard.writeText(csvContent).then(function() {
+        btn.textContent = "✓ Copied!";
+        btn.classList.add("copied");
+        setTimeout(function() {
+            btn.textContent = "Copy CSV";
+            btn.classList.remove("copied");
+        }, 2000);
+    }).catch(function() {
+        btn.textContent = "✗ Failed";
+        setTimeout(function() {
+            btn.textContent = "Copy CSV";
+        }, 2000);
+    });
+}
 ${"<"}/script>
 </body>
 </html>`;
