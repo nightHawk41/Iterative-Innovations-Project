@@ -147,6 +147,7 @@ function buildSalesReportHtml(data) {
     .action-btn.download:hover { background: #d49200; }
     .action-btn.close-btn { background: transparent; color: #ccc; border: 1px solid #555; }
     .action-btn.close-btn:hover { background: #333; color: white; }
+    .action-btn.copy-btn.copied { border-color: #4caf50; color: #4caf50; }
 
     .report-body { max-width: 900px; margin: 36px auto; padding: 0 24px 60px; }
 
