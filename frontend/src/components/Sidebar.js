@@ -266,7 +266,7 @@ function Sidebar({ activeTab, setActiveTab, slots, onInventoryChange, onReset, h
     <div class="section-body">
       <ul>
         <li><strong>Help</strong> — Opens this help guide in a new window.</li>
-        <li><strong>Reload</strong> — Re-fetches the latest inventory from the server and resets the Sales Report button. Use this after uploading new inventory or to refresh stale data.</li>
+        <li><strong>Reload</strong> — Re-fetches the latest inventory from the server, resets the Sales Report button, and closes any open sales report window. Use this after uploading new inventory or to refresh stale data.</li>
         <li><strong>Close</strong> — Closes the application window.</li>
       </ul>
     </div>

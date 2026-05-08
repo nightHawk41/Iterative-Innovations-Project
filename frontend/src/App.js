@@ -3,6 +3,7 @@ import AppHeader from './components/AppHeader';
 import Sidebar from './components/Sidebar';
 import MachinePanel from './components/MachinePanel';
 import Toast from './components/Toast';
+import { resetSalesReportLifecycle } from './utils/generateSalesReport';
 import './App.css';
 
 const EMPTY_SUMMARY = {
@@ -103,7 +104,11 @@ function App() {
           slots={slots}
           summary={summary}
           onInventoryChange={fetchInventory}
-          onReset={() => { fetchInventory(); setHasTransactions(false); }}
+          onReset={async () => {
+            resetSalesReportLifecycle();
+            setHasTransactions(false);
+            await fetchInventory();
+          }}
           hasTransactions={hasTransactions}
           onTransactionAdded={() => setHasTransactions(true)}
         />
