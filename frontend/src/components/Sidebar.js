@@ -262,6 +262,17 @@ function Sidebar({ activeTab, setActiveTab, slots, onInventoryChange, onReset, h
   </div>
 
   <div class="section">
+    <div class="section-title">SIDEBAR - BOTTOM BUTTONS</div>
+    <div class="section-body">
+      <ul>
+        <li><strong>Help</strong> — Opens this help guide in a new window.</li>
+        <li><strong>Reload</strong> — Re-fetches the latest inventory from the server and resets the Sales Report button. Use this after uploading new inventory or to refresh stale data.</li>
+        <li><strong>Close</strong> — Closes the application window.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="section">
     <div class="section-title">PURCHASING - VIRTUAL VENDING MACHINE</div>
     <div class="section-body">
       <ul>
@@ -324,9 +335,9 @@ function Sidebar({ activeTab, setActiveTab, slots, onInventoryChange, onReset, h
       </div>
 
       <div className="sidebar-footer">
+        <button className="btn" onClick={openHelpWindow}>Help</button>
         <button className="btn" onClick={onReset}>Reload</button>
         <button className="btn" onClick={closeProgram}>Close</button>
-        <button className="btn" onClick={openHelpWindow}>Help</button>
       </div>
     </aside>
   );
