@@ -224,8 +224,8 @@ function buildSalesReportHtml(data) {
         <span class="top-bar-title">| Sales Report</span>
     </div>
     <div class="top-bar-actions">
-        <button class="action-btn download" onclick="downloadCSV()">Download CSV</button>
-        <button class="action-btn copy-btn" id="copy-btn" onclick="copyCSV()">Copy CSV</button>
+        <button class="action-btn download" onclick="downloadCSV()">⬇ Download CSV</button>
+        <button class="action-btn copy-btn" id="copy-btn" onclick="copyCSV()">⎘ Copy CSV</button>
         <button class="action-btn close-btn" onclick="window.close()">✕ Close</button>
     </div>
 </div>

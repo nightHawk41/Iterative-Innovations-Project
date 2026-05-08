@@ -18,6 +18,8 @@ describe("Sidebar", () => {
   });
 
   it("enables the Generate Sales Report button after a successful transaction CSV upload", async () => {
+    const onTransactionAdded = jest.fn();
+
     global.fetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -27,18 +29,20 @@ describe("Sidebar", () => {
       }),
     });
 
-    render(
+    const { rerender } = render(
       <Sidebar
         activeTab="admin"
         setActiveTab={jest.fn()}
         slots={[]}
         onInventoryChange={jest.fn()}
+        hasTransactions={false}
+        onTransactionAdded={onTransactionAdded}
       />
     );
 
-    await userEvent.click(screen.getByRole("button", { name: "Upload Transaction CSV" }));
+    await userEvent.click(screen.getByRole("button", { name: "Upload CBORD Transactions" }));
 
-    const reportButton = screen.getByRole("button", { name: "Generate Sales Report" });
+    const reportButton = screen.getByRole("button", { name: /Generate Sales Report/ });
     expect(reportButton).toBeDisabled();
 
     const file = new File(["header\nvalue"], "transactions.csv", { type: "text/csv" });
@@ -47,8 +51,21 @@ describe("Sidebar", () => {
     await userEvent.click(screen.getByRole("button", { name: "Upload & Process" }));
 
     await waitFor(() => {
-      expect(reportButton).toBeEnabled();
+      expect(onTransactionAdded).toHaveBeenCalledTimes(1);
     });
+
+    rerender(
+      <Sidebar
+        activeTab="admin"
+        setActiveTab={jest.fn()}
+        slots={[]}
+        onInventoryChange={jest.fn()}
+        hasTransactions={true}
+        onTransactionAdded={onTransactionAdded}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: /Generate Sales Report/ })).toBeEnabled();
   });
 
   it("calls GET /api/reports/sales and opens a report window when Generate Sales Report is clicked", async () => {
@@ -60,42 +77,33 @@ describe("Sidebar", () => {
     };
     const openSpy = jest.spyOn(window, "open").mockReturnValue(popup);
 
-    global.fetch
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          processed_count: 24,
-          updated_slots: [],
-          unresolved_amounts: [],
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          generated_at: "2026-04-23T14:30:00Z",
-          source: "transaction_log",
-          date_range: { start: "2026-03-10T00:00:00Z", end: "2026-03-17T00:00:00Z" },
-          total_revenue: 87.5,
-          total_units: 42,
-          unique_items: 1,
-          top_item: {
-            item_name: "Soda",
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        generated_at: "2026-04-23T14:30:00Z",
+        source: "transaction_log",
+        date_range: { start: "2026-03-10T00:00:00Z", end: "2026-03-17T00:00:00Z" },
+        total_revenue: 87.5,
+        total_units: 42,
+        unique_items: 1,
+        top_item: {
+          item_name: "Soda",
+          slot_id: "A1",
+          units: 12,
+          revenue: 24,
+        },
+        items: [
+          {
+            rank: 1,
             slot_id: "A1",
-            units: 12,
-            revenue: 24,
+            item_name: "Soda",
+            units_sold: 12,
+            total_revenue: 24,
+            avg_price: 2,
           },
-          items: [
-            {
-              rank: 1,
-              slot_id: "A1",
-              item_name: "Soda",
-              units_sold: 12,
-              total_revenue: 24,
-              avg_price: 2,
-            },
-          ],
-        }),
-      });
+        ],
+      }),
+    });
 
     render(
       <Sidebar
@@ -103,22 +111,13 @@ describe("Sidebar", () => {
         setActiveTab={jest.fn()}
         slots={[]}
         onInventoryChange={jest.fn()}
+        hasTransactions={true}
+        onTransactionAdded={jest.fn()}
       />
     );
 
-    await userEvent.click(screen.getByRole("button", { name: "Upload Transaction CSV" }));
-
-    const reportButton = screen.getByRole("button", { name: "Generate Sales Report" });
-    expect(reportButton).toBeDisabled();
-
-    const file = new File(["header\nvalue"], "transactions.csv", { type: "text/csv" });
-    await userEvent.upload(screen.getByLabelText("Transaction CSV file"), file);
-
-    await userEvent.click(screen.getByRole("button", { name: "Upload & Process" }));
-
-    await waitFor(() => {
-      expect(reportButton).toBeEnabled();
-    });
+    const reportButton = screen.getByRole("button", { name: /Generate Sales Report/ });
+    expect(reportButton).toBeEnabled();
 
     await userEvent.click(reportButton);
 
@@ -132,19 +131,10 @@ describe("Sidebar", () => {
   });
 
   it("shows an error toast when report generation API fails", async () => {
-    global.fetch
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          processed_count: 24,
-          updated_slots: [],
-          unresolved_amounts: [],
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: false,
-        json: async () => ({ error: "Report failed." }),
-      });
+    global.fetch.mockResolvedValueOnce({
+      ok: false,
+      json: async () => ({ error: "Report failed." }),
+    });
 
     render(
       <Sidebar
@@ -152,22 +142,13 @@ describe("Sidebar", () => {
         setActiveTab={jest.fn()}
         slots={[]}
         onInventoryChange={jest.fn()}
+        hasTransactions={true}
+        onTransactionAdded={jest.fn()}
       />
     );
 
-    await userEvent.click(screen.getByRole("button", { name: "Upload Transaction CSV" }));
-
-    const reportButton = screen.getByRole("button", { name: "Generate Sales Report" });
-    expect(reportButton).toBeDisabled();
-
-    const file = new File(["header\nvalue"], "transactions.csv", { type: "text/csv" });
-    await userEvent.upload(screen.getByLabelText("Transaction CSV file"), file);
-
-    await userEvent.click(screen.getByRole("button", { name: "Upload & Process" }));
-
-    await waitFor(() => {
-      expect(reportButton).toBeEnabled();
-    });
+    const reportButton = screen.getByRole("button", { name: /Generate Sales Report/ });
+    expect(reportButton).toBeEnabled();
 
     await userEvent.click(reportButton);
 
@@ -176,34 +157,38 @@ describe("Sidebar", () => {
     });
   });
 
-  it("renders the inventory upload panel in the admin sidebar", () => {
+  it("renders the inventory upload panel in the admin sidebar", async () => {
     render(
       <Sidebar
         activeTab="admin"
         setActiveTab={jest.fn()}
         slots={[]}
         onInventoryChange={jest.fn()}
+        hasTransactions={false}
+        onTransactionAdded={jest.fn()}
       />
     );
 
-    expect(screen.getByRole("button", { name: "Upload New Inventory CSV" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Upload New Inventory" })).toBeInTheDocument();
 
-    userEvent.click(screen.getByRole("button", { name: "Upload New Inventory CSV" }));
-    expect(screen.getByRole("button", { name: "Update Inventory" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "Upload New Inventory" }));
+    expect(screen.getByRole("button", { name: /Update Inventory/ })).toBeDisabled();
   });
 
-  it("opens only one admin accordion panel at a time and updates toggle arrows", async () => {
+  it("allows opening multiple admin accordion panels and updates toggle arrows", async () => {
     render(
       <Sidebar
         activeTab="admin"
         setActiveTab={jest.fn()}
         slots={[]}
         onInventoryChange={jest.fn()}
+        hasTransactions={false}
+        onTransactionAdded={jest.fn()}
       />
     );
 
     const restockHeader = screen.getByRole("button", { name: /\+ Manual Restock/ });
-    const transactionHeader = screen.getByRole("button", { name: /Upload Transaction CSV/ });
+    const transactionHeader = screen.getByRole("button", { name: /Upload CBORD Transactions/ });
 
     expect(restockHeader).toHaveTextContent("▸");
     expect(transactionHeader).toHaveTextContent("▸");
@@ -217,8 +202,8 @@ describe("Sidebar", () => {
 
     await userEvent.click(transactionHeader);
     expect(transactionHeader).toHaveTextContent("▾");
-    expect(restockHeader).toHaveTextContent("▸");
-    expect(screen.queryByLabelText("Slot ID")).not.toBeInTheDocument();
+    expect(restockHeader).toHaveTextContent("▾");
+    expect(screen.getByLabelText("Slot ID")).toBeInTheDocument();
     expect(screen.getByLabelText("Transaction CSV file")).toBeInTheDocument();
   });
 
@@ -243,35 +228,55 @@ describe("Sidebar", () => {
     expect(screen.getByText("Critical / Out").nextSibling).toHaveTextContent("2");
   });
 
-  it("calls onInventoryChange when Reload is clicked", async () => {
-    const onInventoryChange = jest.fn();
+  it("attempts to close the app when Close is clicked", async () => {
+    const openSpy = jest.spyOn(window, "open").mockReturnValue(window);
+    const closeSpy = jest.spyOn(window, "close").mockImplementation(() => {});
 
-    render(
-      <Sidebar
-        activeTab="dashboard"
-        setActiveTab={jest.fn()}
-        slots={[]}
-        onInventoryChange={onInventoryChange}
-      />
-    );
-
-    await userEvent.click(screen.getByRole("button", { name: "Reload" }));
-    expect(onInventoryChange).toHaveBeenCalledTimes(1);
-  });
-
-  it("shows help message toast when Help is clicked", async () => {
     render(
       <Sidebar
         activeTab="dashboard"
         setActiveTab={jest.fn()}
         slots={[]}
         onInventoryChange={jest.fn()}
+        hasTransactions={false}
+        onTransactionAdded={jest.fn()}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(openSpy).toHaveBeenCalledWith("", "_self");
+    expect(closeSpy).toHaveBeenCalledTimes(1);
+
+    openSpy.mockRestore();
+    closeSpy.mockRestore();
+  });
+
+  it("opens the help window when Help is clicked", async () => {
+    const popup = {
+      document: {
+        write: jest.fn(),
+        close: jest.fn(),
+      },
+    };
+    const openSpy = jest.spyOn(window, "open").mockReturnValue(popup);
+
+    render(
+      <Sidebar
+        activeTab="dashboard"
+        setActiveTab={jest.fn()}
+        slots={[]}
+        onInventoryChange={jest.fn()}
+        hasTransactions={false}
+        onTransactionAdded={jest.fn()}
       />
     );
 
     await userEvent.click(screen.getByRole("button", { name: "Help" }));
-    expect(showToast).toHaveBeenCalledWith(
-      "Help: Green = healthy, Yellow = low/expiring, Red = critical/expired."
-    );
+
+    expect(openSpy).toHaveBeenCalledTimes(1);
+    expect(popup.document.write).toHaveBeenCalledTimes(1);
+    expect(popup.document.close).toHaveBeenCalledTimes(1);
+
+    openSpy.mockRestore();
   });
 });
