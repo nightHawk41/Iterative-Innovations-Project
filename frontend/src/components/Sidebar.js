@@ -2,7 +2,7 @@ import React from 'react';
 import AdminTab from './AdminTab';
 import DashboardTab from './DashboardTab';
 
-function Sidebar({ activeTab, setActiveTab, slots, onInventoryChange, hasTransactions, onTransactionAdded }) {
+function Sidebar({ activeTab, setActiveTab, slots, onInventoryChange, onReset, hasTransactions, onTransactionAdded }) {
   function closeProgram() {
     // Best-effort close for browser/electron contexts; browsers may block closing non-script-opened tabs.
     window.open('', '_self');
@@ -324,6 +324,7 @@ function Sidebar({ activeTab, setActiveTab, slots, onInventoryChange, hasTransac
       </div>
 
       <div className="sidebar-footer">
+        <button className="btn" onClick={onReset}>Reload</button>
         <button className="btn" onClick={closeProgram}>Close</button>
         <button className="btn" onClick={openHelpWindow}>Help</button>
       </div>

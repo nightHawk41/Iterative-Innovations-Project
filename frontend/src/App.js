@@ -103,6 +103,7 @@ function App() {
           slots={slots}
           summary={summary}
           onInventoryChange={fetchInventory}
+          onReset={() => { fetchInventory(); setHasTransactions(false); }}
           hasTransactions={hasTransactions}
           onTransactionAdded={() => setHasTransactions(true)}
         />
