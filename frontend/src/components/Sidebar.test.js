@@ -228,22 +228,27 @@ describe("Sidebar", () => {
     expect(screen.getByText("Critical / Out").nextSibling).toHaveTextContent("2");
   });
 
-  it("calls onInventoryChange when Reload is clicked", async () => {
-    const onInventoryChange = jest.fn();
+  it("attempts to close the app when Close is clicked", async () => {
+    const openSpy = jest.spyOn(window, "open").mockReturnValue(window);
+    const closeSpy = jest.spyOn(window, "close").mockImplementation(() => {});
 
     render(
       <Sidebar
         activeTab="dashboard"
         setActiveTab={jest.fn()}
         slots={[]}
-        onInventoryChange={onInventoryChange}
+        onInventoryChange={jest.fn()}
         hasTransactions={false}
         onTransactionAdded={jest.fn()}
       />
     );
 
-    await userEvent.click(screen.getByRole("button", { name: "Reload" }));
-    expect(onInventoryChange).toHaveBeenCalledTimes(1);
+    await userEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(openSpy).toHaveBeenCalledWith("", "_self");
+    expect(closeSpy).toHaveBeenCalledTimes(1);
+
+    openSpy.mockRestore();
+    closeSpy.mockRestore();
   });
 
   it("opens the help window when Help is clicked", async () => {

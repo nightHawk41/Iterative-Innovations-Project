@@ -3,6 +3,12 @@ import AdminTab from './AdminTab';
 import DashboardTab from './DashboardTab';
 
 function Sidebar({ activeTab, setActiveTab, slots, onInventoryChange, hasTransactions, onTransactionAdded }) {
+  function closeProgram() {
+    // Best-effort close for browser/electron contexts; browsers may block closing non-script-opened tabs.
+    window.open('', '_self');
+    window.close();
+  }
+
   function openHelpWindow() {
     const helpHTML = `<!DOCTYPE html>
 <html lang="en">
@@ -249,7 +255,7 @@ function Sidebar({ activeTab, setActiveTab, slots, onInventoryChange, hasTransac
         <li>Clicking the button opens the Sales Report in a new browser window.</li>
         <li>The report shows Total Revenue, Units Sold, Unique Items, the top-selling item, and a full ranked breakdown table sorted by revenue.</li>
         <li>Click <strong>⬇ Download CSV</strong> inside the report window to save the report as a <code>.csv</code> file.</li>
-        <li>Click <strong>Copy CSV</strong> inside the report window to copy the full sales report CSV to your clipboard.</li>
+        <li>Click <strong>⎘ Copy CSV</strong> inside the report window to copy the full sales report CSV to your clipboard.</li>
         <li>Click <strong>✕ Close</strong> inside the report window to close it and return to the Admin Panel.</li>
       </ul>
     </div>
@@ -318,7 +324,7 @@ function Sidebar({ activeTab, setActiveTab, slots, onInventoryChange, hasTransac
       </div>
 
       <div className="sidebar-footer">
-        <button className="btn" onClick={onInventoryChange}>Reload</button>
+        <button className="btn" onClick={closeProgram}>Close</button>
         <button className="btn" onClick={openHelpWindow}>Help</button>
       </div>
     </aside>
