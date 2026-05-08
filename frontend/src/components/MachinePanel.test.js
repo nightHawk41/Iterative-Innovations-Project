@@ -25,4 +25,11 @@ describe('MachinePanel', () => {
     expect(screen.getByText('UMBC Vending Machine')).toBeInTheDocument();
     expect(screen.getAllByTestId('slot-tile')).toHaveLength(24);
   });
+
+  it('shows upload prompt when no inventory slots are available', () => {
+    render(<MachinePanel slots={[]} onPurchaseSuccess={jest.fn()} />);
+
+    expect(screen.getByText('Upload inventory to view the vending machine grid.')).toBeInTheDocument();
+    expect(screen.queryAllByTestId('slot-tile')).toHaveLength(0);
+  });
 });

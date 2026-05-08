@@ -92,6 +92,20 @@ body {
   flex: 1;
 }
 
+.machine-grid-empty {
+  grid-column: 1 / -1;
+  align-self: center;
+  justify-self: center;
+  max-width: 480px;
+  text-align: center;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #333;
+  background: #f4f4f4;
+  border: 1px dashed var(--border);
+  padding: 12px 14px;
+}
+
 .slot-tile {
   font-family: 'Inter', sans-serif; /* ADDED */
   border: 2px solid var(--slot-border);
