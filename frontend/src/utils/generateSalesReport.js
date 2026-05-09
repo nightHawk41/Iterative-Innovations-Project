@@ -53,6 +53,7 @@ function formatDateRange(dateRange) {
 }
 
 function buildSalesReportHtml(data) {
+  const cycleLabel = data.cycle_id ? `Cycle #${data.cycle_id}` : "Current Cycle";
   const generatedAt = data.generated_at
     ? new Date(data.generated_at).toLocaleString("en-US")
     : new Date().toLocaleString("en-US");
@@ -65,6 +66,9 @@ function buildSalesReportHtml(data) {
   const totalUnits = Number(data.total_units ?? 0);
   const uniqueItems = Number(data.unique_items ?? items.length);
   const unresolvedCount = Number(data.unresolved_count ?? 0);
+  const csvFileName = data.cycle_id
+    ? `umbc_sales_report_cycle_${data.cycle_id}.csv`
+    : "umbc_sales_report.csv";
 
   const tableRows = items
     .map(
@@ -82,6 +86,7 @@ function buildSalesReportHtml(data) {
 
   const csvLines = [
     "UMBC Vending Inventory System - Sales Report",
+    `Cycle:,${cycleLabel}`,
     `Generated:,${generatedAt}`,
     `Date Range:,${dateRange}`,
     "",
@@ -223,7 +228,7 @@ function buildSalesReportHtml(data) {
 <div class="top-bar">
     <div class="top-bar-left">
         <span class="top-bar-logo">UMBC</span>
-        <span class="top-bar-title">| Sales Report</span>
+      <span class="top-bar-title">| Sales Report ${escapeHtml(cycleLabel)}</span>
     </div>
     <div class="top-bar-actions">
         <button class="action-btn download" onclick="downloadCSV()">⬇ Download CSV</button>
@@ -236,6 +241,7 @@ function buildSalesReportHtml(data) {
     <div class="report-header">
         <h1>UMBC Vending — Sales Report</h1>
         <div class="report-meta">
+          <span><strong>Cycle:</strong> ${escapeHtml(cycleLabel)}</span>
             <span><strong>Generated:</strong> ${escapeHtml(generatedAt)}</span>
             <span><strong>Date Range:</strong> ${escapeHtml(dateRange)}</span>
         </div>
@@ -307,7 +313,7 @@ function downloadCSV() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "umbc_sales_report.csv";
+  a.download = ${JSON.stringify(csvFileName)};
     a.click();
     URL.revokeObjectURL(url);
 }
@@ -367,9 +373,15 @@ function openSalesReportWindow(data) {
   win.document.close();
 }
 
-export async function generateSalesReport() {
+export async function generateSalesReport(options = {}) {
   try {
-    const response = await fetch("/api/reports/sales");
+    const params = new URLSearchParams();
+    if (options.cycleId !== undefined && options.cycleId !== null && String(options.cycleId).trim() !== "") {
+      params.set("cycle_id", String(options.cycleId));
+    }
+
+    const reportUrl = params.toString() ? `/api/reports/sales?${params.toString()}` : "/api/reports/sales";
+    const response = await fetch(reportUrl);
     const data = await response.json();
 
     if (!response.ok) {

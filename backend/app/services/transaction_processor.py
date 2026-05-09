@@ -8,6 +8,7 @@ from app import db
 
 #from app.models.item_slot import ItemSlot
 from app.models.transaction import Transaction
+from app.models.sales_cycle import SalesCycle
 from app.repositories.transaction_repository import TransactionRepository
 from app.services.inventory_service import InventoryService
 
@@ -82,14 +83,21 @@ class TransactionProcessor:
         Process a list of raw CSV row dicts produced by parse_csv().
         Wraps the entire process in a single transaction, relying on 
         InventoryService to flush row-by-row to avoid stale reads.
+        
+        Assigns each transaction to the currently active sales cycle.
         """
         processed_count = 0
         updated_slots: list[dict] = []
         unresolved_amounts: list[float] = []
+        
+        # Get or create the active sales cycle
+        active_cycle = self._get_or_create_active_cycle()
+        if not active_cycle:
+            raise RuntimeError("Failed to get or create active sales cycle")
 
         try:
             for row in rows:
-                tx = self._build_transaction(row)
+                tx = self._build_transaction(row, active_cycle.cycle_id)
                 if tx is None:
                     continue  # skip malformed rows but keep going
 
@@ -155,12 +163,14 @@ class TransactionProcessor:
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _build_transaction(self, row: dict) -> Optional[Transaction]:
+    def _build_transaction(self, row: dict, cycle_id: int) -> Optional[Transaction]:
         """
         Convert one raw CSV row dict into a Transaction model instance.
 
         Returns None (and logs a warning) if any required field is missing
         or cannot be parsed, so a single bad row never aborts the batch.
+        
+        Assigns the provided cycle_id to the transaction.
         """
         try:
             transaction_id = int(str(row[COL_PRIMARY]).strip())
@@ -187,6 +197,7 @@ class TransactionProcessor:
         tx.user_id        = user_id
         tx.timestamp      = timestamp
         tx.resolved_slot_id = None  # set by InventoryService.apply_sale on success
+        tx.cycle_id       = cycle_id  # Assign to active sales cycle
         return tx
 
     @staticmethod
@@ -227,3 +238,35 @@ class TransactionProcessor:
                 f"CSV at '{path}' is missing required column(s): {missing}. "
                 f"Expected headers matching transaction_stream_mock.csv."
             )
+
+    @staticmethod
+    def _get_or_create_active_cycle() -> Optional[SalesCycle]:
+        """
+        Get the currently active sales cycle, or create one if none exists.
+        
+        Returns the active SalesCycle or None if creation failed.
+        """
+        # Try to find an existing active cycle
+        active_cycle = db.session.query(SalesCycle).filter_by(is_active=True).first()
+        
+        if active_cycle:
+            return active_cycle
+        
+        # No active cycle exists; create one
+        try:
+            new_cycle = SalesCycle(
+                started_at=datetime.now(timezone.utc),
+                is_active=True
+            )
+            db.session.add(new_cycle)
+            db.session.flush()  # Get the cycle_id without committing the full transaction
+            logger.info(
+                "[TransactionProcessor] Created new active sales cycle: cycle_id=%d", 
+                new_cycle.cycle_id
+            )
+            return new_cycle
+        except Exception as exc:
+            logger.error(
+                "[TransactionProcessor] Failed to create new sales cycle: %s", exc
+            )
+            return None

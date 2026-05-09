@@ -33,6 +33,12 @@ class Transaction(db.Model):
                            nullable=True   # nullable: mapping may fail for unknown prices
                        )
     
+    cycle_id = db.Column(
+        db.Integer,
+        db.ForeignKey("sales_cycles.cycle_id"),
+        nullable=True  # nullable during migration; will be populated by cycle rotation logic
+    )
+    
     def to_dict(self) -> dict:
         """Return a dictionary representation of the transaction."""
         # Ensure timestamp includes timezone info
@@ -46,7 +52,8 @@ class Transaction(db.Model):
             'amount': self.amount,
             'timestamp': ts.isoformat() if ts else None,
             'user_id': self.user_id,
-            'resolved_slot_id': self.resolved_slot_id
+            'resolved_slot_id': self.resolved_slot_id,
+            'cycle_id': self.cycle_id
         }
     
     def __repr__(self) -> str:

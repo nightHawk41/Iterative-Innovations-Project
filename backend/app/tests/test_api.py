@@ -53,6 +53,7 @@ def app():
         # declared on ItemSlot; otherwise mapper configuration fails.
         from app.models.transaction import Transaction       # noqa: F401
         from app.models.notification import Notification    # noqa: F401
+        from app.models.sales_cycle import SalesCycle        # noqa: F401
         _db.create_all()
         _seed_test_data(_db)
 
@@ -66,8 +67,18 @@ def app():
 def _seed_test_data(db):
     """Insert a minimal set of slots covering Green, Yellow, and Red states."""
     from app.models.item_slot import ItemSlot
+    from app.models.sales_cycle import SalesCycle
+    from datetime import datetime, timezone
 
     today = date.today()
+
+    # Create an active sales cycle for reporting tests
+    active_cycle = SalesCycle(
+        started_at=datetime.now(timezone.utc),
+        is_active=True
+    )
+    db.session.add(active_cycle)
+    db.session.commit()
 
     slots = [
         # Green: healthy qty, far expiry
@@ -119,13 +130,25 @@ def client(app):
 
 @pytest.fixture(autouse=True)
 def clear_transactions_before_test(app):
-    """Clear all transactions before each test to ensure test isolation."""
+    """Clear all transactions and create a fresh active cycle before each test."""
     from app.models.transaction import Transaction
+    from app.models.sales_cycle import SalesCycle
+    from datetime import datetime, timezone
+    
     with app.app_context():
         from app import db
         # Delete all transactions to ensure test isolation
         db.session.query(Transaction).delete()
         db.session.commit()
+        
+        # Create a fresh active cycle for this test
+        active_cycle = SalesCycle(
+            started_at=datetime.now(timezone.utc),
+            is_active=True
+        )
+        db.session.add(active_cycle)
+        db.session.commit()
+    
     yield
 
 
@@ -543,7 +566,7 @@ class TestPostPurchase:
         txns = _json(client.get("/api/transactions"))
         latest_txn = txns[0]  # Most recent transaction (ordered descending)
         
-        required = {"transaction_id", "amount", "timestamp", "user_id", "resolved_slot_id"}
+        required = {"transaction_id", "amount", "timestamp", "user_id", "resolved_slot_id", "cycle_id"}
         assert required == set(latest_txn.keys())
 
     def test_purchase_transaction_resolves_to_correct_slot(self, client):
@@ -621,6 +644,27 @@ class TestPostPurchase:
         after = next(s for s in _json(client.get("/api/inventory")) if s["slot_id"] == "A3")
         assert after["quantity"] == qty_before - 2, "quantity should decrement by the provided amount"
 
+    def test_purchase_creates_active_cycle_if_missing_and_appears_in_report(self, client, app):
+        from app import db
+        from app.models.sales_cycle import SalesCycle
+
+        with app.app_context():
+            db.session.query(SalesCycle).delete()
+            db.session.commit()
+
+        purchase_resp = client.post("/api/purchase", json={"slot_id": "A1"})
+        assert purchase_resp.status_code == 200
+
+        txns = _json(client.get("/api/transactions"))
+        assert len(txns) == 1
+        assert txns[0]["cycle_id"] is not None
+
+        report = _json(client.get("/api/reports/sales"))
+        assert report["transaction_count"] == 1
+        assert report["has_transactions"] is True
+        assert report["top_item"] is not None
+        assert report["top_item"]["slot_id"] == "A1"
+
 
 # ===========================================================================
 # GET /api/transactions
@@ -654,12 +698,27 @@ class TestGetTransactions:
 
     def test_transactions_ordered_by_timestamp_descending(self, client):
         """Most recent transaction should appear first."""
-        client.post("/api/purchase", json={"slot_id": "A1"})
+        restock_csv = (
+            "ROW,Product,Vending Price,stock,expiration_date\n"
+            "A1,Granola Bar,2.15,10,2027-01-01\n"
+            "A2,Trail Mix,2.35,10,2027-01-01\n"
+        ).encode("utf-8")
+        restock_resp = client.post(
+            "/api/inventory/upload",
+            data={"file": (io.BytesIO(restock_csv), "txn_ordering_setup.csv")},
+            content_type="multipart/form-data",
+        )
+        assert restock_resp.status_code == 200
+
+        first_purchase = client.post("/api/purchase", json={"slot_id": "A1"})
+        assert first_purchase.status_code == 200
         import time
         time.sleep(0.01)  # Ensure different timestamps
-        client.post("/api/purchase", json={"slot_id": "A2"})
+        second_purchase = client.post("/api/purchase", json={"slot_id": "A2"})
+        assert second_purchase.status_code == 200
         
         data = _json(client.get("/api/transactions"))
+        assert len(data) == 2
         # The second purchase (A2) should be first in the list (most recent)
         assert data[0]["resolved_slot_id"] == "A2"
         assert data[1]["resolved_slot_id"] == "A1"
@@ -702,18 +761,26 @@ class TestGetSalesReport:
         """Insert transaction fixtures directly for deterministic report assertions."""
         from app import db
         from app.models.transaction import Transaction
+        from app.models.sales_cycle import SalesCycle
 
         with app.app_context():
+            # Get the active cycle for these transactions
+            active_cycle = db.session.query(SalesCycle).filter_by(is_active=True).first()
+            
             for row in rows:
-                db.session.add(
-                    Transaction(
-                        transaction_id=row["transaction_id"],
-                        amount=row["amount"],
-                        timestamp=row["timestamp"],
-                        user_id=row.get("user_id", "Test User"),
-                        resolved_slot_id=row.get("resolved_slot_id"),
-                    )
+                txn = Transaction(
+                    transaction_id=row["transaction_id"],
+                    amount=row["amount"],
+                    timestamp=row["timestamp"],
+                    user_id=row.get("user_id", "Test User"),
+                    resolved_slot_id=row.get("resolved_slot_id"),
                 )
+                
+                # Assign to active cycle if one exists
+                if active_cycle:
+                    txn.cycle_id = active_cycle.cycle_id
+                
+                db.session.add(txn)
             db.session.commit()
 
     def test_returns_200(self, client):
@@ -723,6 +790,7 @@ class TestGetSalesReport:
     def test_returns_required_top_level_fields(self, client):
         data = _json(client.get("/api/reports/sales"))
         required = {
+            "cycle_id",
             "items",
             "total_revenue",
             "total_units",
@@ -971,6 +1039,88 @@ class TestGetSalesReport:
         assert data["transaction_count"] == 1
         assert data["has_transactions"] is True
 
+    def test_history_endpoint_lists_cycles(self, client, app):
+        from app import db
+        from app.models.sales_cycle import SalesCycle
+        from app.models.transaction import Transaction
+        from app.services.cycle_service import CycleService
+
+        with app.app_context():
+            active_cycle = db.session.query(SalesCycle).filter_by(is_active=True).first()
+            active_cycle_id = active_cycle.cycle_id
+            db.session.add(
+                Transaction(
+                    transaction_id=9901,
+                    amount=2.15,
+                    timestamp=datetime(2026, 3, 10, 8, 0, 0, tzinfo=timezone.utc),
+                    user_id="History User",
+                    resolved_slot_id="A1",
+                    cycle_id=active_cycle_id,
+                )
+            )
+            db.session.commit()
+
+            historical_cycle = CycleService.rotate_cycle()
+            historical_cycle_id = historical_cycle.cycle_id
+            db.session.add(
+                Transaction(
+                    transaction_id=9902,
+                    amount=2.35,
+                    timestamp=datetime(2026, 3, 11, 8, 0, 0, tzinfo=timezone.utc),
+                    user_id="History User",
+                    resolved_slot_id="A2",
+                    cycle_id=historical_cycle_id,
+                )
+            )
+            db.session.commit()
+
+        data = _json(client.get("/api/reports/sales/history"))
+        assert "cycles" in data
+        assert len(data["cycles"]) >= 2
+        assert data["cycles"][0]["cycle_id"] == historical_cycle_id
+        assert data["cycles"][0]["transaction_count"] == 1
+
+    def test_report_can_be_loaded_for_specific_cycle(self, client, app):
+        from app import db
+        from app.models.sales_cycle import SalesCycle
+        from app.models.transaction import Transaction
+        from app.services.cycle_service import CycleService
+
+        with app.app_context():
+            active_cycle = db.session.query(SalesCycle).filter_by(is_active=True).first()
+            active_cycle_id = active_cycle.cycle_id
+            db.session.add(
+                Transaction(
+                    transaction_id=9911,
+                    amount=2.15,
+                    timestamp=datetime(2026, 3, 10, 8, 0, 0, tzinfo=timezone.utc),
+                    user_id="Cycle User",
+                    resolved_slot_id="A1",
+                    cycle_id=active_cycle_id,
+                )
+            )
+            db.session.commit()
+
+            historical_cycle = CycleService.rotate_cycle()
+            historical_cycle_id = historical_cycle.cycle_id
+            db.session.add(
+                Transaction(
+                    transaction_id=9912,
+                    amount=2.55,
+                    timestamp=datetime(2026, 3, 11, 8, 0, 0, tzinfo=timezone.utc),
+                    user_id="Cycle User",
+                    resolved_slot_id="A3",
+                    cycle_id=historical_cycle_id,
+                )
+            )
+            db.session.commit()
+
+        report = _json(client.get(f"/api/reports/sales?cycle_id={historical_cycle_id}"))
+        assert report["cycle_id"] == historical_cycle_id
+        assert report["transaction_count"] == 1
+        assert report["top_item"]["slot_id"] == "A3"
+        assert report["top_item"]["item_name"] == "Protein Bar"
+
     def test_step6_end_to_end_purchase_and_upload_verification(self, client):
         # Re-stock A1 and A2 to known quantities before the test, since the
         # module-scoped DB may have had stock depleted by earlier purchase tests.
@@ -1092,6 +1242,32 @@ class TestPostInventoryUpload:
         assert a1["price"] == 4.2
         assert a2["item_name"] == "Updated Trail Mix"
         assert a2["price"] == 4.5
+
+    def test_upload_clears_existing_transactions_for_fresh_cycle(self, client):
+        purchase_resp = client.post("/api/purchase", json={"slot_id": "A1", "quantity": 1})
+        assert purchase_resp.status_code == 200
+        assert len(_json(client.get("/api/transactions"))) == 1
+
+        payload = (
+            "ROW,Product,Vending Price\n"
+            "A1,Fresh Granola,4.00\n"
+            "A2,Fresh Trail Mix,4.25\n"
+        ).encode("utf-8")
+
+        resp = client.post(
+            "/api/inventory/upload",
+            data={"file": (io.BytesIO(payload), "inventory_fresh_cycle.csv")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 200
+
+        body = _json(resp)
+        assert body["transactions_cleared"] >= 1
+        assert _json(client.get("/api/transactions")) == []
+
+        report = _json(client.get("/api/reports/sales"))
+        assert report["transaction_count"] == 0
+        assert report["has_transactions"] is False
 
     def test_upload_applies_optional_stock_and_expiration_date(self, client):
         payload = (

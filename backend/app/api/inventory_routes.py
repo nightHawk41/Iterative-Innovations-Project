@@ -14,7 +14,10 @@ import tempfile
 
 from flask import Blueprint, jsonify, request
 
+from app import db
+from app.models.transaction import Transaction
 from app.services.inventory_service import ConcurrencyError, InventoryService
+from app.services.cycle_service import CycleService
 from app.utils.seed import seed_database
 
 inventory_bp = Blueprint("inventory", __name__)
@@ -96,9 +99,19 @@ def upload_inventory_csv():
       - Vending Price
 
     Optional columns are handled in seed utilities (B-13).
+    
+        On successful upload, starts a fresh report cycle by clearing all existing
+        transactions and rotating the sales cycle.
 
     Success (200):
-      {"added": int, "updated": int, "skipped": int, "total_rows": int, "config_path": str}
+            {
+                "added": int,
+                "updated": int,
+                "skipped": int,
+                "total_rows": int,
+                "config_path": str,
+                "transactions_cleared": int
+            }
 
     Failure responses:
       400 — missing file, invalid csv schema/content, or seed error
@@ -120,6 +133,22 @@ def upload_inventory_csv():
         summary = seed_database(config_path=tmp_path, update_existing=True)
         if summary.get("error"):
             return jsonify({"error": summary["error"], "status": 400}), 400
+
+        # New inventory upload means a fresh sales-reporting cycle.
+        # Clear all existing transactions so reports restart from zero.
+        cleared_count = db.session.query(Transaction).delete()
+        db.session.commit()
+        summary["transactions_cleared"] = int(cleared_count)
+
+        # Rotate the sales cycle: close current active, create new active
+        try:
+            CycleService.rotate_cycle()
+        except Exception as exc:
+            # Log the cycle rotation error but don't fail the upload
+            # The inventory was successfully uploaded; cycle rotation is auxiliary
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error("Failed to rotate sales cycle after inventory upload: %s", exc)
 
         return jsonify(summary), 200
 
