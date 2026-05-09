@@ -1,6 +1,7 @@
 import React from 'react';
 import AdminTab from './AdminTab';
 import DashboardTab from './DashboardTab';
+import Toast from './Toast';
 
 function Sidebar({ activeTab, setActiveTab, slots, onInventoryChange, onReset, hasTransactions, onTransactionAdded }) {
   function closeProgram() {
@@ -345,6 +346,8 @@ function Sidebar({ activeTab, setActiveTab, slots, onInventoryChange, onReset, h
           />
         )}
       </div>
+
+      <Toast />
 
       <div className="sidebar-footer">
         <button className="btn" onClick={openHelpWindow}>Help</button>

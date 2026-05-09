@@ -104,7 +104,7 @@ function buildSalesReportHtml(data) {
       ].join(",")
     ),
     "",
-    `TOTAL,,,${totalUnits},$${toMoney(totalRevenue)},`,
+    `TOTAL,,,${totalUnits},$${toMoney(totalRevenue)},$${toMoney(totalAveragePrice)}`,
   ].join("\n");
 
   return `<!DOCTYPE html>
