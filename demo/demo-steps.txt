@@ -1,0 +1,46 @@
+1. Start the app before any inventory is uploaded so the machine grid is initially empty.
+
+2. Click Help and briefly show the built-in usage guide (colors, upload rules, purchasing, and restock behavior).
+
+3. Go to Admin Panel -> Upload New Inventory.
+
+4. Upload a full inventory CSV (with stock and expiration_date values), click Upload & Process, then click 🔄 Update Inventory.
+
+5. Switch to Dashboard and highlight the machine grid plus the sidebar summary cards (Total Slots, Healthy, Low / Expiring, Critical / Out).
+
+6. Click one active slot to open the purchase modal, then cancel once so viewers see the purchase flow.
+
+7. Switch to Admin Panel and point out that slot tiles are non-interactive in admin mode (purchases are dashboard-only).
+
+8. Open Upload CBORD Transactions, upload the transaction CSV, and click Upload & Process.
+
+9. Highlight inventory changes after processing (stock drops and any resulting tile color/status changes).
+
+10. Go back to Dashboard and complete one real purchase so viewers see live stock decrement and transaction logging.
+
+11. Return to Admin Panel and click 📊 Generate Sales Report.
+
+12. In the report window, walk through summary cards, top-selling callout, and the ranked sales table.
+
+13. Demonstrate both export actions: ⎘ Copy CSV and ⬇ Download CSV, then click ✕ Close.
+
+14. Back in Admin Panel -> Upload New Inventory, upload a CSV with only required columns (ROW, Product, Vending Price), then click Upload & Process and 🔄 Update Inventory.
+
+15. Explain that inventory uploads support required columns only, with optional stock and expiration_date columns when you want to override those values.
+
+16. Click Reload in the sidebar to refresh inventory and reset the sales report lifecycle for the new inventory state.
+
+17. Return to Dashboard, complete one purchase, then go back to Admin Panel and regenerate the sales report to show the new cycle data.
+
+18. Open + Manual Restock:
+    a. Select a low-quantity slot.
+    b. Enter a valid Qty Added value (up to the slot max).
+    c. Set a future Exp Date and click Restock.
+
+19. Confirm the restocked slot updates in the machine grid and status colors.
+
+20. Optional close: click Close in the sidebar to show exit behavior (some browsers may block window close).
+
+
+Narration Script:
+ 

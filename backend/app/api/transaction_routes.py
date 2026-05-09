@@ -44,6 +44,20 @@ def _empty_sales_report(cycle=None):
     }
 
 
+def _coerce_bool(value, default: bool = False) -> bool:
+    """Parse common bool-like values from query/form/json payloads."""
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "n", "off"}:
+        return False
+    return default
+
+
 def _build_sales_report_for_cycle(cycle):
     from app.models.item_slot import ItemSlot
     from app.models.transaction import Transaction
@@ -182,6 +196,10 @@ def process_transactions():
         (a) a CSV file upload  (multipart/form-data, field name = "file"), or
         (b) a JSON body        ({ "rows": [ ... ] })
 
+    Optional mode switch:
+        simulate_time=true will replay timestamps in chronological order and
+        advance a simulated inventory clock across date boundaries.
+
     If neither is provided the default mock CSV is used.
 
     Returns the processing summary:
@@ -206,6 +224,8 @@ def process_transactions():
             if not uploaded.filename:
                 return jsonify({"error": "Uploaded file has no filename.", "status": 400}), 400
 
+            simulate_time = _coerce_bool(request.form.get("simulate_time"), default=False)
+
             import tempfile
             with tempfile.NamedTemporaryFile(
                 suffix=".csv", delete=False, mode="wb"
@@ -215,7 +235,7 @@ def process_transactions():
 
             try:
                 rows    = _processor.parse_csv(tmp_path)
-                summary = _processor.process_transactions(rows)
+                summary = _processor.process_transactions(rows, simulate_time=simulate_time)
             finally:
                 os.unlink(tmp_path)
 
@@ -227,14 +247,15 @@ def process_transactions():
         body = request.get_json(silent=True)
         if body and "rows" in body:
             rows    = body["rows"]
-            summary = _processor.process_transactions(rows)
+            simulate_time = _coerce_bool(body.get("simulate_time"), default=False)
+            summary = _processor.process_transactions(rows, simulate_time=simulate_time)
             return jsonify(summary), 200
 
         # ------------------------------------------------------------------ #
         # (c) Default mock CSV                                                #
         # ------------------------------------------------------------------ #
         rows    = _processor.parse_csv(DEFAULT_MOCK)
-        summary = _processor.process_transactions(rows)
+        summary = _processor.process_transactions(rows, simulate_time=False)
         return jsonify(summary), 200
 
     # D-2: optimistic concurrency guard — out-of-stock race

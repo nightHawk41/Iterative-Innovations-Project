@@ -1,0 +1,79 @@
+UMBC Vending Inventory System Demo Voiceover
+
+Hello, and welcome to our demo of the UMBC Vending Inventory System.
+In this walkthrough, I will show how we track inventory health, process transaction data, generate sales reports, and restock items in real time.
+
+We start with the application running before any inventory is uploaded.
+At this point, the vending machine grid is empty, which confirms the system is waiting for data.
+
+Next, I click Help and briefly review the built-in guide.
+This guide explains color meanings, upload rules, purchase behavior, and restocking steps.
+
+Now I move to Admin Panel, then Upload New Inventory.
+I upload a full inventory CSV that includes stock and expiration_date values.
+After that, I click Upload and Process, then Update Inventory.
+
+With inventory loaded, I switch to Dashboard.
+Now we can see the machine grid, along with summary cards in the sidebar:
+Total Slots,
+Healthy,
+Low or Expiring,
+and Critical or Out.
+
+To demonstrate customer flow, I click one active slot to open the purchase modal,
+then cancel once so you can see the confirmation step.
+
+I switch back to Admin Panel and point out that slot tiles are non-interactive in admin mode.
+Purchases are only available from the Dashboard view.
+
+Next, I open Upload CBORD Transactions,
+upload the transaction CSV,
+and click Upload and Process.
+
+After processing, inventory updates immediately.
+You can see stock counts drop, and some tile colors may change based on stock and expiration thresholds.
+
+Now I return to Dashboard and complete one real purchase.
+This shows live stock decrement and transaction logging.
+
+Back in Admin Panel, I click Generate Sales Report.
+In the report window, we review the summary cards,
+the top-selling item callout,
+and the ranked sales table.
+
+Then I demonstrate both export options:
+Copy CSV,
+and Download CSV.
+After that, I close the report window.
+
+Next, I go back to Upload New Inventory.
+This time, I upload a CSV with only the required columns:
+ROW,
+Product,
+and Vending Price.
+I click Upload and Process, then Update Inventory.
+
+This shows that inventory uploads support a required minimum schema,
+while stock and expiration_date are optional when overrides are needed.
+
+Now I click Reload in the sidebar.
+This refreshes the inventory view and resets the sales report lifecycle for the new inventory state.
+
+I return to Dashboard, complete one purchase,
+then go back to Admin Panel and generate the sales report again.
+This confirms reporting for the new cycle data.
+
+Finally, I open Manual Restock.
+I select a low-quantity slot,
+enter a valid quantity to add within the slot maximum,
+set a future expiration date,
+and click Restock.
+
+The slot updates immediately in the machine grid,
+including quantity and status color.
+
+That concludes the demo.
+As an optional final step, we can click Close in the sidebar to show exit behavior,
+noting that some browsers may block window-close actions.
+
+Thank you for watching.

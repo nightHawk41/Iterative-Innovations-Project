@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import AppHeader from './components/AppHeader';
 import Sidebar from './components/Sidebar';
 import MachinePanel from './components/MachinePanel';
-import Toast from './components/Toast';
 import { resetSalesReportLifecycle } from './utils/generateSalesReport';
 import './App.css';
 
@@ -133,7 +132,6 @@ function App() {
           )
         }
       </div>
-      <Toast />
     </div>
   );
 }

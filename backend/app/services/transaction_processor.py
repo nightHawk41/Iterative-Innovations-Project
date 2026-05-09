@@ -1,12 +1,13 @@
 import csv
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from app import db
 
 #from app.models.item_slot import ItemSlot
+from app.models.item_slot import ItemSlot
 from app.models.transaction import Transaction
 from app.models.sales_cycle import SalesCycle
 from app.repositories.transaction_repository import TransactionRepository
@@ -78,17 +79,24 @@ class TransactionProcessor:
         logger.info("[TransactionProcessor] Parsed %d row(s) from %s", len(rows), path)
         return rows
     
-    def process_transactions(self, rows: list[dict]) -> dict:
+    def process_transactions(self, rows: list[dict], simulate_time: bool = False) -> dict:
         """"
         Process a list of raw CSV row dicts produced by parse_csv().
         Wraps the entire process in a single transaction, relying on 
         InventoryService to flush row-by-row to avoid stale reads.
         
         Assigns each transaction to the currently active sales cycle.
+
+        When simulate_time=True, transactions are replayed in timestamp order and
+        inventory expiration dates are shifted backward by the day-delta between
+        consecutive transaction dates.
         """
         processed_count = 0
         updated_slots: list[dict] = []
         unresolved_amounts: list[float] = []
+        replay_days_advanced = 0
+        replay_start_date = None
+        replay_end_date = None
         
         # Get or create the active sales cycle
         active_cycle = self._get_or_create_active_cycle()
@@ -96,10 +104,31 @@ class TransactionProcessor:
             raise RuntimeError("Failed to get or create active sales cycle")
 
         try:
+            transactions: list[Transaction] = []
             for row in rows:
                 tx = self._build_transaction(row, active_cycle.cycle_id)
                 if tx is None:
                     continue  # skip malformed rows but keep going
+                transactions.append(tx)
+
+            if simulate_time:
+                transactions.sort(key=lambda txn: txn.timestamp)
+                if transactions:
+                    replay_start_date = transactions[0].timestamp.date().isoformat()
+                    replay_end_date = transactions[-1].timestamp.date().isoformat()
+
+            current_replay_day = None
+            for tx in transactions:
+                if simulate_time:
+                    tx_day = tx.timestamp.date()
+                    if current_replay_day is None:
+                        current_replay_day = tx_day
+                    elif tx_day > current_replay_day:
+                        day_delta = (tx_day - current_replay_day).days
+                        if day_delta > 0:
+                            self._advance_inventory_clock(day_delta)
+                            replay_days_advanced += day_delta
+                        current_replay_day = tx_day
 
                 try:
                     # Apply the sale (flushes the DB automatically per row)
@@ -139,6 +168,12 @@ class TransactionProcessor:
             "processed_count":    processed_count,
             "updated_slots":      updated_slots,
             "unresolved_amounts": unresolved_amounts,
+            "simulation": {
+                "enabled": simulate_time,
+                "days_advanced": replay_days_advanced,
+                "start_date": replay_start_date,
+                "end_date": replay_end_date,
+            },
         }
         
         logger.info(
@@ -146,6 +181,18 @@ class TransactionProcessor:
             processed_count, len(unresolved_amounts)
         )
         return summary
+
+    @staticmethod
+    def _advance_inventory_clock(days: int) -> None:
+        """Age all slots by moving expiration dates backward by a day count."""
+        if days <= 0:
+            return
+
+        slots = db.session.query(ItemSlot).all()
+        for slot in slots:
+            slot.expiration_date = slot.expiration_date - timedelta(days=days)
+
+        db.session.flush()
 
 
 
