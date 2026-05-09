@@ -59,6 +59,7 @@ function buildSalesReportHtml(data) {
     : new Date().toLocaleString("en-US");
 
   const dateRange = formatDateRange(data.date_range);
+  const csvDateRange = String(dateRange).replace(/[–—]/g, " to ");
   const items = Array.isArray(data.items) ? data.items : [];
   const topItem = data.top_item || null;
 
@@ -69,6 +70,7 @@ function buildSalesReportHtml(data) {
   const csvFileName = data.cycle_id
     ? `umbc_sales_report_cycle_${data.cycle_id}.csv`
     : "umbc_sales_report.csv";
+  const totalAveragePrice = totalUnits > 0 ? totalRevenue / totalUnits : 0;
 
   const tableRows = items
     .map(
@@ -88,7 +90,7 @@ function buildSalesReportHtml(data) {
     "UMBC Vending Inventory System - Sales Report",
     `Cycle:,${cycleLabel}`,
     `Generated:,${generatedAt}`,
-    `Date Range:,${dateRange}`,
+    `Date Range:,${csvDateRange}`,
     "",
     "Rank,Slot ID,Item Name,Units Sold,Total Revenue,Avg Price",
     ...items.map((item) =>
@@ -152,6 +154,7 @@ function buildSalesReportHtml(data) {
     }
     .action-btn.download { background: var(--gold); color: var(--black); }
     .action-btn.download:hover { background: #d49200; }
+    .action-btn.download.downloaded { border-color: #2d7a2d; color: #2d7a2d; }
     .action-btn.close-btn { background: transparent; color: #ccc; border: 1px solid #555; }
     .action-btn.close-btn:hover { background: #333; color: white; }
     .action-btn.copy-btn.copied { border-color: #4caf50; color: #4caf50; }
@@ -231,7 +234,7 @@ function buildSalesReportHtml(data) {
       <span class="top-bar-title">| Sales Report ${escapeHtml(cycleLabel)}</span>
     </div>
     <div class="top-bar-actions">
-        <button class="action-btn download" onclick="downloadCSV()">⬇ Download CSV</button>
+      <button class="action-btn download" id="download-btn" onclick="downloadCSV()">⬇ Download CSV</button>
         <button class="action-btn copy-btn" id="copy-btn" onclick="copyCSV()">⎘ Copy CSV</button>
         <button class="action-btn close-btn" onclick="window.close()">✕ Close</button>
     </div>
@@ -295,7 +298,7 @@ function buildSalesReportHtml(data) {
                     <td colspan="3">TOTAL</td>
                     <td>${Number.isFinite(totalUnits) ? totalUnits : 0}</td>
                     <td>$${toMoney(totalRevenue)}</td>
-                    <td>—</td>
+                    <td>$${toMoney(totalAveragePrice)}</td>
                 </tr>
             </tfoot>
         </table>
@@ -303,19 +306,27 @@ function buildSalesReportHtml(data) {
 
     <div class="report-footer">
         UMBC Vending Inventory System &nbsp;·&nbsp; Generated ${escapeHtml(generatedAt)}
-    </div>
 </div>
 
 <script>
 const csvContent = ${JSON.stringify(csvLines)};
 function downloadCSV() {
-    const blob = new Blob([csvContent], { type: "text/csv" });
+    const btn = document.getElementById("download-btn");
+  const blob = new Blob(["\uFEFF", csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-  a.download = ${JSON.stringify(csvFileName)};
+    a.download = ${JSON.stringify(csvFileName)};
     a.click();
     URL.revokeObjectURL(url);
+  if (btn) {
+        btn.textContent = "✓ Downloaded!";
+        btn.classList.add("downloaded");
+        setTimeout(function() {
+            btn.textContent = "⬇ Download CSV";
+            btn.classList.remove("downloaded");
+        }, 2000);
+    }
 }
 function copyCSV() {
     const btn = document.getElementById("copy-btn");

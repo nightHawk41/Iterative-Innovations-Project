@@ -90,6 +90,7 @@ export function buildSalesReportHtml(data) {
   const totalRevenue = Number(data.total_revenue ?? 0);
   const totalUnits = Number(data.total_units ?? 0);
   const uniqueItems = Number(data.unique_items ?? items.length);
+  const totalAveragePrice = totalUnits > 0 ? totalRevenue / totalUnits : 0;
 
   const tableRows = items
     .map(
@@ -106,10 +107,10 @@ export function buildSalesReportHtml(data) {
     .join("");
 
   const csvLines = [
-    "UMBC Vending Inventory System - Sales Report",
+    "UMBC Vending Inventory System Sales Report",
     `Generated:,${generatedAt}`,
     `Source File:,${source}`,
-    `Date Range:,${dateRange}`,
+    `Date Range:,${escapeHtml(dateRange).replace(/\s*\s*/g, ", ")}`,
     "",
     "Rank,Slot ID,Item Name,Units Sold,Total Revenue,Avg Price",
     ...items.map((item) =>
@@ -123,7 +124,7 @@ export function buildSalesReportHtml(data) {
       ].join(",")
     ),
     "",
-    `TOTAL,,,${totalUnits},$${toMoney(totalRevenue)},`,
+    `TOTAL,,,${totalUnits},$${toMoney(totalRevenue)},$${toMoney(totalAveragePrice)}`,
   ].join("\n");
 
   return `<!DOCTYPE html>
@@ -173,6 +174,7 @@ export function buildSalesReportHtml(data) {
     }
     .action-btn.download { background: var(--gold); color: var(--black); }
     .action-btn.download:hover { background: #d49200; }
+    .action-btn.download.downloaded { border-color: #2d7a2d; color: #2d7a2d; }
     .action-btn.close-btn { background: transparent; color: #ccc; border: 1px solid #555; }
     .action-btn.close-btn:hover { background: #333; color: white; }
 
@@ -242,7 +244,7 @@ export function buildSalesReportHtml(data) {
         <span class="top-bar-title">Sales Report</span>
     </div>
     <div class="top-bar-actions">
-        <button class="action-btn download" onclick="downloadCSV()">⬇ Download CSV</button>
+      <button class="action-btn download" id="download-btn" onclick="downloadCSV()">⬇ Download CSV</button>
         <button class="action-btn close-btn" onclick="window.close()">✕ Close</button>
     </div>
 </div>
@@ -300,7 +302,7 @@ export function buildSalesReportHtml(data) {
                     <td colspan="3">TOTAL</td>
                     <td>${Number.isFinite(totalUnits) ? totalUnits : 0}</td>
                     <td>$${toMoney(totalRevenue)}</td>
-                    <td>—</td>
+                <td>$${toMoney(totalAveragePrice)}</td>
                 </tr>
             </tfoot>
         </table>
@@ -314,6 +316,7 @@ export function buildSalesReportHtml(data) {
 <script>
 const csvContent = ${JSON.stringify(csvLines)};
 function downloadCSV() {
+  const btn = document.getElementById("download-btn");
     const blob = new Blob([csvContent], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -321,6 +324,14 @@ function downloadCSV() {
     a.download = "umbc_sales_report.csv";
     a.click();
     URL.revokeObjectURL(url);
+  if (btn) {
+    btn.textContent = "✓ Downloaded!";
+    btn.classList.add("downloaded");
+    setTimeout(function() {
+      btn.textContent = "⬇ Download CSV";
+      btn.classList.remove("downloaded");
+    }, 2000);
+  }
 }
 <\/script>
 </body>
