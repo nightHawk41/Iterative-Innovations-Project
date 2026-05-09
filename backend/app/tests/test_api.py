@@ -1189,6 +1189,84 @@ class TestGetSalesReport:
 
 
 # ===========================================================================
+# POST /api/transactions/process (simulation mode)
+# ===========================================================================
+
+class TestTransactionReplaySimulationMode:
+
+    def test_default_processing_does_not_age_expiration_dates(self, client):
+        fixed_expiration = (date.today() + timedelta(days=15)).isoformat()
+        setup_csv = (
+            "ROW,Product,Vending Price,stock,expiration_date\n"
+            f"A1,Granola Bar,2.15,10,{fixed_expiration}\n"
+        ).encode("utf-8")
+        setup_resp = client.post(
+            "/api/inventory/upload",
+            data={"file": (io.BytesIO(setup_csv), "replay_setup_default.csv")},
+            content_type="multipart/form-data",
+        )
+        assert setup_resp.status_code == 200
+
+        tx_csv = (
+            "Transaction Date,Primary Key,Patron Name,Tran Amt\n"
+            "5-01-2026,920001,Replay User 1,2.15\n"
+            "5-03-2026,920002,Replay User 2,2.15\n"
+        ).encode("utf-8")
+        process_resp = client.post(
+            "/api/transactions/process",
+            data={"file": (io.BytesIO(tx_csv), "replay_default.csv")},
+            content_type="multipart/form-data",
+        )
+        assert process_resp.status_code == 200
+        process_data = _json(process_resp)
+        assert process_data["simulation"]["enabled"] is False
+        assert process_data["simulation"]["days_advanced"] == 0
+
+        inventory = _json(client.get("/api/inventory"))
+        a1 = next(s for s in inventory if s["slot_id"] == "A1")
+        assert a1["expiration_date"] == fixed_expiration
+
+    def test_simulation_mode_ages_expiration_dates_by_transaction_day_gap(self, client):
+        base_expiration_date = date.today() + timedelta(days=15)
+        fixed_expiration = base_expiration_date.isoformat()
+        setup_csv = (
+            "ROW,Product,Vending Price,stock,expiration_date\n"
+            f"A1,Granola Bar,2.15,10,{fixed_expiration}\n"
+        ).encode("utf-8")
+        setup_resp = client.post(
+            "/api/inventory/upload",
+            data={"file": (io.BytesIO(setup_csv), "replay_setup_simulated.csv")},
+            content_type="multipart/form-data",
+        )
+        assert setup_resp.status_code == 200
+
+        tx_csv = (
+            "Transaction Date,Primary Key,Patron Name,Tran Amt\n"
+            "5-01-2026,920011,Replay User 1,2.15\n"
+            "5-03-2026,920012,Replay User 2,2.15\n"
+        ).encode("utf-8")
+        process_resp = client.post(
+            "/api/transactions/process",
+            data={
+                "file": (io.BytesIO(tx_csv), "replay_simulated.csv"),
+                "simulate_time": "true",
+            },
+            content_type="multipart/form-data",
+        )
+        assert process_resp.status_code == 200
+        process_data = _json(process_resp)
+        assert process_data["simulation"]["enabled"] is True
+        assert process_data["simulation"]["days_advanced"] == 2
+        assert process_data["simulation"]["start_date"] == "2026-05-01"
+        assert process_data["simulation"]["end_date"] == "2026-05-03"
+
+        inventory = _json(client.get("/api/inventory"))
+        a1 = next(s for s in inventory if s["slot_id"] == "A1")
+        expected_expiration = (base_expiration_date - timedelta(days=2)).isoformat()
+        assert a1["expiration_date"] == expected_expiration
+
+
+# ===========================================================================
 # POST /api/inventory/upload
 # ===========================================================================
 

@@ -2,11 +2,12 @@
 ============================
 TASK D-1 — verify_schema.py
 ============================
-Verifies that db.create_all() produces the correct schema for all three
+Verifies that db.create_all() produces the correct schema for all current
 SQLAlchemy models and confirms that SQLite enforces both foreign-key
 relationships at the database level:
 
     Transaction.resolved_slot_id  -> item_slots.slot_id
+    Transaction.cycle_id          -> sales_cycles.cycle_id
     Notification.slot_id          -> item_slots.slot_id
 
 Run from the backend/ directory:
@@ -41,6 +42,7 @@ from app import db as _db
 from app.models.item_slot    import ItemSlot       # noqa: F401
 from app.models.transaction  import Transaction    # noqa: F401
 from app.models.notification import Notification   # noqa: F401
+from app.models.sales_cycle  import SalesCycle     # noqa: F401
 
 
 # ---------------------------------------------------------------------------
@@ -88,10 +90,19 @@ def run_verification() -> None:
         # ------------------------------------------------------------------ #
         # 2. Expected tables exist                                            #
         # ------------------------------------------------------------------ #
-        expected_tables = {"item_slots", "transactions", "notification"}
+        expected_tables = {"item_slots", "transactions", "notification", "sales_cycles"}
         missing = expected_tables - tables
         assert not missing, f"Missing tables: {missing}"
         print(f"✔  All expected tables present: {sorted(expected_tables)}")
+
+        # ------------------------------------------------------------------ #
+        # 2b. sales_cycles column shape                                      #
+        # ------------------------------------------------------------------ #
+        cycle_cols = _columns(insp, "sales_cycles")
+        required_cycle_cols = {"cycle_id", "started_at", "ended_at", "is_active"}
+        missing_cycle_cols = required_cycle_cols - cycle_cols.keys()
+        assert not missing_cycle_cols, f"sales_cycles missing columns: {missing_cycle_cols}"
+        print("✔  sales_cycles schema correct (all columns present).")
 
         # ------------------------------------------------------------------ #
         # 3. item_slots column shape                                          #
@@ -139,7 +150,7 @@ def run_verification() -> None:
         tx_cols = _columns(insp, "transactions")
         required_tx_cols = {
             "transaction_id", "amount", "timestamp",
-            "user_id", "resolved_slot_id",
+            "user_id", "resolved_slot_id", "cycle_id",
         }
         missing_tx_cols = required_tx_cols - tx_cols.keys()
         assert not missing_tx_cols, f"transactions missing columns: {missing_tx_cols}"
@@ -172,6 +183,18 @@ def run_verification() -> None:
             f"Detected FKs: {tx_fks}"
         )
         print("✔  FK transactions.resolved_slot_id → item_slots.slot_id confirmed.")
+
+        tx_cycle_fk_found = any(
+            local == "cycle_id"
+            and referred_table == "sales_cycles"
+            and referred_col == "cycle_id"
+            for local, referred_table, referred_col in tx_fks
+        )
+        assert tx_cycle_fk_found, (
+            f"FK transactions.cycle_id -> sales_cycles.cycle_id NOT FOUND. "
+            f"Detected FKs: {tx_fks}"
+        )
+        print("✔  FK transactions.cycle_id → sales_cycles.cycle_id confirmed.")
 
         # ------------------------------------------------------------------ #
         # 7. Foreign-key: Notification.slot_id -> item_slots.slot_id         #

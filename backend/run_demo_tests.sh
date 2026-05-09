@@ -28,6 +28,46 @@ header() {
 
 FAILURES=0
 
+resolve_python() {
+    local script_dir repo_root local_venv_python
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    repo_root="$(cd "${script_dir}/.." && pwd)"
+    local_venv_python="${repo_root}/.venv/bin/python"
+
+    # Prefer repository-local virtual environment if present.
+    if [ -x "${local_venv_python}" ]; then
+        echo "${local_venv_python}"
+        return
+    fi
+
+    # Prefer the active virtual environment interpreter when available.
+    if [ -n "${VIRTUAL_ENV:-}" ] && [ -x "${VIRTUAL_ENV}/bin/python" ]; then
+        echo "${VIRTUAL_ENV}/bin/python"
+        return
+    fi
+
+    if command -v python >/dev/null 2>&1; then
+        command -v python
+        return
+    fi
+
+    if command -v python3 >/dev/null 2>&1; then
+        command -v python3
+        return
+    fi
+
+    echo ""
+}
+
+PYTHON_BIN="$(resolve_python)"
+
+if [ -z "$PYTHON_BIN" ]; then
+    fail "Python interpreter not found. Activate a virtualenv or install python3."
+    exit 1
+fi
+
+echo -e "${BOLD}Using Python interpreter: ${PYTHON_BIN}${RESET}"
+
 run_suite() {
     local label="$1"
     local cmd="$2"
@@ -50,27 +90,27 @@ echo -e "${BOLD}================================================================
 
 run_suite \
     "SUITE 1 of 6 -- Unit Tests: ItemSlot Model" \
-    "python -m pytest app/tests/test_item_slot.py --tb=short -v"
+    "${PYTHON_BIN} -m pytest app/tests/test_item_slot.py --tb=short -v"
 
 run_suite \
     "SUITE 2 of 6 -- Unit Tests: CBORD Transaction Builder" \
-    "python -m pytest app/tests/test_cbord_transaction_builder.py --tb=short -v"
+    "${PYTHON_BIN} -m pytest app/tests/test_cbord_transaction_builder.py --tb=short -v"
 
 run_suite \
     "SUITE 3 of 6 -- Unit Tests: Mapping Service" \
-    "python -m pytest app/tests/test_mapping_service.py --tb=short -v"
+    "${PYTHON_BIN} -m pytest app/tests/test_mapping_service.py --tb=short -v"
 
 run_suite \
     "SUITE 4 of 6 -- API & Sales Report Tests (Sprint 3)" \
-    "python -m pytest app/tests/test_api.py --tb=short -v"
+    "${PYTHON_BIN} -m pytest app/tests/test_api.py --tb=short -v"
 
 run_suite \
     "SUITE 5 of 6 -- D-1: SQLAlchemy Schema & FK Verification" \
-    "python -m app.tests.verify_schema"
+    "${PYTHON_BIN} -m app.tests.verify_schema"
 
 run_suite \
     "SUITE 6 of 6 -- D-2: Pipeline Integration Tests" \
-    "python -m app.tests.test_pipeline_integration"
+    "${PYTHON_BIN} -m app.tests.test_pipeline_integration"
 
 echo ""
 echo -e "${BOLD}================================================================${RESET}"

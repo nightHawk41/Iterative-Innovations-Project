@@ -4,10 +4,12 @@ function TransactionUpload({ onSuccess, onUploadSuccess }) {
   const [file, setFile]         = useState(null);
   const [feedback, setFeedback] = useState({ message: "", type: "" });
   const [uploading, setUploading] = useState(false);
+  const [simulateTime, setSimulateTime] = useState(false);
 
   function clearState() {
     setFile(null);
     setFeedback({ message: "", type: "" });
+    setSimulateTime(false);
   }
 
   function handleFileChange(e) {
@@ -30,6 +32,7 @@ function TransactionUpload({ onSuccess, onUploadSuccess }) {
     try {
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("simulate_time", simulateTime ? "true" : "false");
       const response = await fetch("/api/transactions/process", {
         method: "POST",
         body: formData,
@@ -67,6 +70,20 @@ function TransactionUpload({ onSuccess, onUploadSuccess }) {
           aria-label="Transaction CSV file"
           onChange={handleFileChange}
         />
+      </div>
+
+      <div className="form-check mb-3">
+        <input
+          id="simulate-time-mode"
+          className="form-check-input"
+          type="checkbox"
+          checked={simulateTime}
+          onChange={(e) => setSimulateTime(e.target.checked)}
+          disabled={uploading}
+        />
+        <label className="form-check-label" htmlFor="simulate-time-mode">
+          Historical replay mode
+        </label>
       </div>
 
       <div className="btn-row">

@@ -248,6 +248,18 @@ function Sidebar({ activeTab, setActiveTab, slots, onInventoryChange, onReset, h
   </div>
 
   <div class="section">
+    <div class="section-title">ADMIN PANEL - HISTORICAL REPLAY MODE</div>
+    <div class="section-body">
+      <ul>
+        <li><strong>Historical Replay Mode</strong> allows you to simulate inventory aging when uploading transaction logs with past or future dates, useful for testing realistic expiration behavior without manually advancing the system clock.</li>
+        <li><strong>Default behavior</strong> (checkbox unchecked): All uploaded transactions are processed immediately. Expiration dates do not age—only stock levels decrease. Use this for normal daily operations.</li>
+        <li><strong>Replay mode</strong> (checkbox checked): Transactions are processed in chronological order by their timestamps. The system advances the inventory clock between each transaction date, causing expiration dates to age realistically. Use this when uploading historical transaction logs to test expired inventory scenarios.</li>
+        <li><strong>How to enable</strong>: Check the <strong>"Historical replay mode"</strong> checkbox before uploading a CBORD transactions CSV file, then click <strong>Upload &amp; Process</strong>.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="section">
     <div class="section-title">ADMIN PANEL - GENERATE SALES REPORT</div>
     <div class="section-body">
       <ul>
