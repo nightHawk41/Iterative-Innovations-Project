@@ -244,11 +244,11 @@ class InventoryService:
             # Uses the transaction builder to generate randomized patron data.
             txn = build_cbord_transaction(fresh_slot.price)
             txn.resolved_slot_id = fresh_slot.slot_id
-            
-            # Assign to the active sales cycle
-            active_cycle = db.session.query(SalesCycle).filter_by(is_active=True).first()
-            if active_cycle:
-                txn.cycle_id = active_cycle.cycle_id
+
+            # Assign to the active sales cycle. If no active cycle exists,
+            # create one so purchase transactions are always reportable.
+            active_cycle = self._get_or_create_active_cycle()
+            txn.cycle_id = active_cycle.cycle_id
 
             db.session.add(fresh_slot)
             db.session.add(txn)
@@ -283,3 +283,18 @@ class InventoryService:
                     "expiration_date must be in 'YYYY-MM-DD' format."
                 ) from exc
         raise ValueError("expiration_date must be a date or YYYY-MM-DD string.")
+
+    @staticmethod
+    def _get_or_create_active_cycle() -> SalesCycle:
+        """Return the active sales cycle, creating one if it doesn't exist."""
+        active_cycle = db.session.query(SalesCycle).filter_by(is_active=True).first()
+        if active_cycle:
+            return active_cycle
+
+        new_cycle = SalesCycle(
+            started_at=datetime.now(timezone.utc),
+            is_active=True,
+        )
+        db.session.add(new_cycle)
+        db.session.flush()
+        return new_cycle

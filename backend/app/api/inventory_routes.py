@@ -14,6 +14,8 @@ import tempfile
 
 from flask import Blueprint, jsonify, request
 
+from app import db
+from app.models.transaction import Transaction
 from app.services.inventory_service import ConcurrencyError, InventoryService
 from app.services.cycle_service import CycleService
 from app.utils.seed import seed_database
@@ -98,11 +100,18 @@ def upload_inventory_csv():
 
     Optional columns are handled in seed utilities (B-13).
     
-    On successful upload, rotates the sales cycle (closes the current active
-    cycle and creates a new one) to isolate reporting by inventory batch.
+        On successful upload, starts a fresh report cycle by clearing all existing
+        transactions and rotating the sales cycle.
 
     Success (200):
-      {"added": int, "updated": int, "skipped": int, "total_rows": int, "config_path": str}
+            {
+                "added": int,
+                "updated": int,
+                "skipped": int,
+                "total_rows": int,
+                "config_path": str,
+                "transactions_cleared": int
+            }
 
     Failure responses:
       400 — missing file, invalid csv schema/content, or seed error
@@ -124,6 +133,12 @@ def upload_inventory_csv():
         summary = seed_database(config_path=tmp_path, update_existing=True)
         if summary.get("error"):
             return jsonify({"error": summary["error"], "status": 400}), 400
+
+        # New inventory upload means a fresh sales-reporting cycle.
+        # Clear all existing transactions so reports restart from zero.
+        cleared_count = db.session.query(Transaction).delete()
+        db.session.commit()
+        summary["transactions_cleared"] = int(cleared_count)
 
         # Rotate the sales cycle: close current active, create new active
         try:
