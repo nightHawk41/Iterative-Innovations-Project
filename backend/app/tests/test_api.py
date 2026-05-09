@@ -53,6 +53,7 @@ def app():
         # declared on ItemSlot; otherwise mapper configuration fails.
         from app.models.transaction import Transaction       # noqa: F401
         from app.models.notification import Notification    # noqa: F401
+        from app.models.sales_cycle import SalesCycle        # noqa: F401
         _db.create_all()
         _seed_test_data(_db)
 
@@ -66,8 +67,18 @@ def app():
 def _seed_test_data(db):
     """Insert a minimal set of slots covering Green, Yellow, and Red states."""
     from app.models.item_slot import ItemSlot
+    from app.models.sales_cycle import SalesCycle
+    from datetime import datetime, timezone
 
     today = date.today()
+
+    # Create an active sales cycle for reporting tests
+    active_cycle = SalesCycle(
+        started_at=datetime.now(timezone.utc),
+        is_active=True
+    )
+    db.session.add(active_cycle)
+    db.session.commit()
 
     slots = [
         # Green: healthy qty, far expiry
@@ -119,13 +130,25 @@ def client(app):
 
 @pytest.fixture(autouse=True)
 def clear_transactions_before_test(app):
-    """Clear all transactions before each test to ensure test isolation."""
+    """Clear all transactions and create a fresh active cycle before each test."""
     from app.models.transaction import Transaction
+    from app.models.sales_cycle import SalesCycle
+    from datetime import datetime, timezone
+    
     with app.app_context():
         from app import db
         # Delete all transactions to ensure test isolation
         db.session.query(Transaction).delete()
         db.session.commit()
+        
+        # Create a fresh active cycle for this test
+        active_cycle = SalesCycle(
+            started_at=datetime.now(timezone.utc),
+            is_active=True
+        )
+        db.session.add(active_cycle)
+        db.session.commit()
+    
     yield
 
 
@@ -543,7 +566,7 @@ class TestPostPurchase:
         txns = _json(client.get("/api/transactions"))
         latest_txn = txns[0]  # Most recent transaction (ordered descending)
         
-        required = {"transaction_id", "amount", "timestamp", "user_id", "resolved_slot_id"}
+        required = {"transaction_id", "amount", "timestamp", "user_id", "resolved_slot_id", "cycle_id"}
         assert required == set(latest_txn.keys())
 
     def test_purchase_transaction_resolves_to_correct_slot(self, client):
@@ -702,18 +725,26 @@ class TestGetSalesReport:
         """Insert transaction fixtures directly for deterministic report assertions."""
         from app import db
         from app.models.transaction import Transaction
+        from app.models.sales_cycle import SalesCycle
 
         with app.app_context():
+            # Get the active cycle for these transactions
+            active_cycle = db.session.query(SalesCycle).filter_by(is_active=True).first()
+            
             for row in rows:
-                db.session.add(
-                    Transaction(
-                        transaction_id=row["transaction_id"],
-                        amount=row["amount"],
-                        timestamp=row["timestamp"],
-                        user_id=row.get("user_id", "Test User"),
-                        resolved_slot_id=row.get("resolved_slot_id"),
-                    )
+                txn = Transaction(
+                    transaction_id=row["transaction_id"],
+                    amount=row["amount"],
+                    timestamp=row["timestamp"],
+                    user_id=row.get("user_id", "Test User"),
+                    resolved_slot_id=row.get("resolved_slot_id"),
                 )
+                
+                # Assign to active cycle if one exists
+                if active_cycle:
+                    txn.cycle_id = active_cycle.cycle_id
+                
+                db.session.add(txn)
             db.session.commit()
 
     def test_returns_200(self, client):

@@ -152,10 +152,10 @@ def get_transactions():
 @transaction_bp.route("/api/reports/sales", methods=["GET"])
 def get_sales_report():
     """
-    Returns aggregated sales metrics from resolved transactions.
+    Returns aggregated sales metrics from resolved transactions in the active cycle.
 
     Includes B-11 availability guard fields:
-        - transaction_count (all transactions)
+        - transaction_count (transactions in active cycle)
         - has_transactions  (transaction_count > 0)
 
     Response (200):
@@ -189,9 +189,33 @@ def get_sales_report():
     try:
         from app.models.item_slot import ItemSlot
         from app.models.transaction import Transaction
+        from app.models.sales_cycle import SalesCycle
+
+        # Get the active sales cycle
+        active_cycle = db.session.query(SalesCycle).filter_by(is_active=True).first()
+        
+        # If no active cycle, return empty report
+        if not active_cycle:
+            return jsonify(
+                {
+                    "items": [],
+                    "total_revenue": 0.0,
+                    "total_units": 0,
+                    "unique_items": 0,
+                    "date_range": {"start": None, "end": None},
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "top_item": None,
+                    "unresolved_count": 0,
+                    "transaction_count": 0,
+                    "has_transactions": False,
+                }
+            ), 200
 
         # B-11: availability guard for frontend button state.
-        transaction_count = db.session.query(func.count(Transaction.transaction_id)).scalar() or 0
+        # Count transactions in the active cycle only
+        transaction_count = db.session.query(func.count(Transaction.transaction_id)).filter(
+            Transaction.cycle_id == active_cycle.cycle_id
+        ).scalar() or 0
 
         # Step 1: build a price -> {slot_id, item_name} lookup from current inventory.
         price_map = {}
@@ -202,9 +226,12 @@ def get_sales_report():
                 "item_name": slot.item_name,
             }
 
-        # Step 1: aggregate by resolved (slot_id, item_name) using amount-based lookup.
+        # Step 2: aggregate by resolved (slot_id, item_name) using amount-based lookup.
+        # Filter to active cycle only
         grouped = defaultdict(lambda: {"units_sold": 0, "total_revenue": 0.0})
-        transactions = db.session.query(Transaction).order_by(Transaction.timestamp.asc()).all()
+        transactions = db.session.query(Transaction).filter(
+            Transaction.cycle_id == active_cycle.cycle_id
+        ).order_by(Transaction.timestamp.asc()).all()
 
         for transaction in transactions:
             price_key = round(float(transaction.amount), 2)

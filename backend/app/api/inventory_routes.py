@@ -15,6 +15,7 @@ import tempfile
 from flask import Blueprint, jsonify, request
 
 from app.services.inventory_service import ConcurrencyError, InventoryService
+from app.services.cycle_service import CycleService
 from app.utils.seed import seed_database
 
 inventory_bp = Blueprint("inventory", __name__)
@@ -96,6 +97,9 @@ def upload_inventory_csv():
       - Vending Price
 
     Optional columns are handled in seed utilities (B-13).
+    
+    On successful upload, rotates the sales cycle (closes the current active
+    cycle and creates a new one) to isolate reporting by inventory batch.
 
     Success (200):
       {"added": int, "updated": int, "skipped": int, "total_rows": int, "config_path": str}
@@ -120,6 +124,16 @@ def upload_inventory_csv():
         summary = seed_database(config_path=tmp_path, update_existing=True)
         if summary.get("error"):
             return jsonify({"error": summary["error"], "status": 400}), 400
+
+        # Rotate the sales cycle: close current active, create new active
+        try:
+            CycleService.rotate_cycle()
+        except Exception as exc:
+            # Log the cycle rotation error but don't fail the upload
+            # The inventory was successfully uploaded; cycle rotation is auxiliary
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error("Failed to rotate sales cycle after inventory upload: %s", exc)
 
         return jsonify(summary), 200
 

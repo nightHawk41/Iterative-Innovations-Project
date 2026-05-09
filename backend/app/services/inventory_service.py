@@ -36,6 +36,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app import db
 from app.models.item_slot   import ItemSlot
 from app.models.transaction import Transaction
+from app.models.sales_cycle import SalesCycle
 from app.repositories.item_slot_repository  import ItemSlotRepository
 from app.services.mapping_service import MappingService
 from app.services.cbord_transaction_builder import build_cbord_transaction
@@ -243,6 +244,11 @@ class InventoryService:
             # Uses the transaction builder to generate randomized patron data.
             txn = build_cbord_transaction(fresh_slot.price)
             txn.resolved_slot_id = fresh_slot.slot_id
+            
+            # Assign to the active sales cycle
+            active_cycle = db.session.query(SalesCycle).filter_by(is_active=True).first()
+            if active_cycle:
+                txn.cycle_id = active_cycle.cycle_id
 
             db.session.add(fresh_slot)
             db.session.add(txn)

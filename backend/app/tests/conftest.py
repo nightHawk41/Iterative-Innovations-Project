@@ -30,6 +30,7 @@ from app import db
 from app.models.item_slot import ItemSlot
 from app.models.transaction import Transaction
 from app.models.notification import Notification
+from app.models.sales_cycle import SalesCycle
 
 @pytest.fixture
 def app():
