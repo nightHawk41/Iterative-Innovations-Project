@@ -2,7 +2,7 @@ import React from 'react';
 import AdminTab from './AdminTab';
 import DashboardTab from './DashboardTab';
 
-function Sidebar({ activeTab, setActiveTab, slots, onInventoryChange, hasTransactions, onTransactionAdded }) {
+function Sidebar({ activeTab, setActiveTab, slots, onInventoryChange, onReset, hasTransactions, onTransactionAdded }) {
   function closeProgram() {
     // Best-effort close for browser/electron contexts; browsers may block closing non-script-opened tabs.
     window.open('', '_self');
@@ -262,6 +262,17 @@ function Sidebar({ activeTab, setActiveTab, slots, onInventoryChange, hasTransac
   </div>
 
   <div class="section">
+    <div class="section-title">SIDEBAR - BOTTOM BUTTONS</div>
+    <div class="section-body">
+      <ul>
+        <li><strong>Help</strong> — Opens this help guide in a new window.</li>
+        <li><strong>Reload</strong> — Re-fetches the latest inventory from the server, resets the Sales Report button, and closes any open sales report window. Use this after uploading new inventory or to refresh stale data.</li>
+        <li><strong>Close</strong> — Closes the application window.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="section">
     <div class="section-title">PURCHASING - VIRTUAL VENDING MACHINE</div>
     <div class="section-body">
       <ul>
@@ -324,8 +335,9 @@ function Sidebar({ activeTab, setActiveTab, slots, onInventoryChange, hasTransac
       </div>
 
       <div className="sidebar-footer">
-        <button className="btn" onClick={closeProgram}>Close</button>
         <button className="btn" onClick={openHelpWindow}>Help</button>
+        <button className="btn" onClick={onReset}>Reload</button>
+        <button className="btn" onClick={closeProgram}>Close</button>
       </div>
     </aside>
   );

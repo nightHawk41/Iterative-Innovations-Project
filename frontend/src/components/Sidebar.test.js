@@ -228,6 +228,25 @@ describe("Sidebar", () => {
     expect(screen.getByText("Critical / Out").nextSibling).toHaveTextContent("2");
   });
 
+  it("calls onReset when Reload is clicked", async () => {
+    const onReset = jest.fn();
+
+    render(
+      <Sidebar
+        activeTab="dashboard"
+        setActiveTab={jest.fn()}
+        slots={[]}
+        onInventoryChange={jest.fn()}
+        onReset={onReset}
+        hasTransactions={false}
+        onTransactionAdded={jest.fn()}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Reload" }));
+    expect(onReset).toHaveBeenCalledTimes(1);
+  });
+
   it("attempts to close the app when Close is clicked", async () => {
     const openSpy = jest.spyOn(window, "open").mockReturnValue(window);
     const closeSpy = jest.spyOn(window, "close").mockImplementation(() => {});

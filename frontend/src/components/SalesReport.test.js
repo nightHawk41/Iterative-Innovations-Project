@@ -1,4 +1,4 @@
-import { generateSalesReport } from "../utils/generateSalesReport";
+import { generateSalesReport, resetSalesReportLifecycle } from "../utils/generateSalesReport";
 import { showToast } from "../utils/toast";
 
 jest.mock("../utils/toast", () => ({
@@ -134,5 +134,42 @@ describe("SalesReport", () => {
 
     expect(ok).toBe(false);
     expect(showToast).toHaveBeenCalledWith("Network down");
+  });
+
+  it("closes an open report window when the lifecycle is reset", async () => {
+    const documentWrite = jest.fn();
+    const documentClose = jest.fn();
+    const closeSpy = jest.fn();
+    const openSpy = jest.spyOn(window, "open").mockReturnValue({
+      closed: false,
+      close: closeSpy,
+      addEventListener: jest.fn(),
+      document: {
+        write: documentWrite,
+        close: documentClose,
+      },
+    });
+
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        generated_at: "2026-04-23T14:30:00Z",
+        date_range: { start: "2026-03-10T00:00:00Z", end: "2026-03-17T00:00:00Z" },
+        total_revenue: 87.5,
+        total_units: 42,
+        unique_items: 1,
+        unresolved_count: 0,
+        top_item: null,
+        items: [],
+      }),
+    });
+
+    const ok = await generateSalesReport();
+
+    expect(ok).toBe(true);
+    resetSalesReportLifecycle();
+    expect(closeSpy).toHaveBeenCalledTimes(1);
+
+    openSpy.mockRestore();
   });
 });

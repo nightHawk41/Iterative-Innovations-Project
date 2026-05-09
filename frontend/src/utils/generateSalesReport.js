@@ -1,5 +1,7 @@
 import { showToast } from "./toast";
 
+let activeSalesReportWindow = null;
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -330,6 +332,41 @@ ${"<"}/script>
 </html>`;
 }
 
+function closeActiveSalesReportWindow() {
+  if (activeSalesReportWindow && !activeSalesReportWindow.closed && typeof activeSalesReportWindow.close === "function") {
+    activeSalesReportWindow.close();
+  }
+
+  activeSalesReportWindow = null;
+}
+
+export function resetSalesReportLifecycle() {
+  closeActiveSalesReportWindow();
+}
+
+function openSalesReportWindow(data) {
+  closeActiveSalesReportWindow();
+
+  const win = window.open("", "_blank", "width=960,height=700,scrollbars=yes,resizable=yes");
+  if (!win) {
+    throw new Error("Unable to open sales report window. Please allow popups.");
+  }
+
+  activeSalesReportWindow = win;
+
+  if (typeof win.addEventListener === "function") {
+    win.addEventListener("unload", () => {
+      if (activeSalesReportWindow === win) {
+        activeSalesReportWindow = null;
+      }
+    });
+  }
+
+  const reportHtml = buildSalesReportHtml(data);
+  win.document.write(reportHtml);
+  win.document.close();
+}
+
 export async function generateSalesReport() {
   try {
     const response = await fetch("/api/reports/sales");
@@ -340,15 +377,7 @@ export async function generateSalesReport() {
       return false;
     }
 
-    const win = window.open("", "_blank", "width=960,height=700,scrollbars=yes,resizable=yes");
-    if (!win) {
-      showToast("Unable to open sales report window. Please allow popups.");
-      return false;
-    }
-
-    const reportHtml = buildSalesReportHtml(data);
-    win.document.write(reportHtml);
-    win.document.close();
+    openSalesReportWindow(data);
     return true;
   } catch (error) {
     showToast(error?.message || "Failed to generate sales report.");
